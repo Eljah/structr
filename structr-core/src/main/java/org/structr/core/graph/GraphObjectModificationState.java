@@ -277,19 +277,7 @@ public class GraphObjectModificationState implements ModificationEvent {
 		switch (status & 0x000f) {
 
 			case 6: // created, modified => only creation callback will be called
-				if (doValidation) {
-					valid &= validate(securityContext, errorBuffer);
-				}
-				object.indexPassiveProperties();
-				break;
-
 			case 4: // created => creation callback
-				if (doValidation) {
-					valid &= validate(securityContext, errorBuffer);
-				}
-				object.indexPassiveProperties();
-				break;
-
 			case 2: // modified => modification callback
 				if (doValidation) {
 					valid &= validate(securityContext, errorBuffer);
@@ -297,6 +285,8 @@ public class GraphObjectModificationState implements ModificationEvent {
 				object.indexPassiveProperties();
 				break;
 
+			case 5: // created, modified, deleted => deletion callback
+			case 3: // modified, deleted => deletion callback
 			case 1: // deleted => deletion callback
 				object.removeFromIndex();
 				break;
