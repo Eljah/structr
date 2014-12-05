@@ -26,6 +26,7 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.Arrays;
 import org.structr.common.StructrTest;
+import org.structr.common.error.FrameworkException;
 import org.structr.core.entity.TestOne;
 
 /**
@@ -121,7 +122,7 @@ public class SyncCommandTest extends StructrTest {
 			// 3. verify that database is empty
 			try (final Tx tx = app.tx()) {
 
-				assertEquals("Database should contain not TestOne entities.", 0, app.nodeQuery(TestOne.class).getResult().size());
+				assertEquals("Database should contain no TestOne entities.", 0, app.nodeQuery(TestOne.class).getResult().size());
 				tx.success();
 			}
 
@@ -157,7 +158,7 @@ public class SyncCommandTest extends StructrTest {
 			}
 
 
-		} catch (Throwable fex) {
+		} catch (FrameworkException fex) {
 
 			fex.printStackTrace();
 
