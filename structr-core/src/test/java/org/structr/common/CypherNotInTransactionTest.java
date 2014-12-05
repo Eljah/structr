@@ -71,7 +71,7 @@ public class CypherNotInTransactionTest extends StructrTest {
 			
 			try (final Tx tx = app.tx()) {
 				
-				ExecutionResult result            = engine.execute("start n = node(*) match (n)<-[r:ONE_TO_ONE]-() return r");
+				ExecutionResult result            = engine.execute("match (n)<-[r:ONE_TO_ONE]-() return r");
 				final Iterator<Relationship> rels = result.columnAs("r");
 
 				assertTrue(rels.hasNext());
