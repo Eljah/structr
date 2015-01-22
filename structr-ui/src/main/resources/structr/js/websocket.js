@@ -146,13 +146,24 @@ function wsConnect() {
                     Structr.refreshUi();
                 }
 
+                StructrModel.callCallback(data.callback, data.data[data.data['key']]);
+                StructrModel.clearCallback(data.callback);
+
             } else if (command === 'LOGOUT') { /*********************** LOGOUT ************************/
 
                 localStorage.removeItem(userKey);
                 Structr.clearMain();
                 Structr.login();
 
+            } else if (command === 'GET_LOCAL_STORAGE') { /*********************** GET_LOCAL_STORAGE ************************/
+
+                var localStorageData = JSON.parse(data.data.localStorageString);
+                Object.keys(localStorageData).forEach(function(key) {
+                    localStorage.setItem(key, localStorageData[key]);
+                });
+
             } else if (command === 'STATUS') { /*********************** STATUS ************************/
+
                 log('Error code: ' + code, message);
 
                 if (code === 403) {
@@ -166,7 +177,7 @@ function wsConnect() {
                 } else {
 
                     var msgClass;
-                    var codeStr = code.toString();
+                    var codeStr = code ? code.toString() : '';
 
                     if (codeStr.startsWith('2')) {
                         msgClass = 'success';
@@ -375,7 +386,7 @@ function wsConnect() {
             } else if (command === 'CREATE' || command === 'ADD' || command === 'IMPORT') { /*********************** CREATE, ADD, IMPORT ************************/
 
                 $(result).each(function(i, entity) {
-                    if (command === 'CREATE' && (entity.isPage || entity.isFolder || entity.isFile || entity.isImage || entity.isVideo || entity.isUser || entity.isGroup || entity.isWidget)) {
+                    if (command === 'CREATE' && (entity.isPage || entity.isFolder || entity.isFile || entity.isImage || entity.isVideo || entity.isUser || entity.isGroup || entity.isWidget || entity.isResourceAccess)) {
                         StructrModel.create(entity);
                     } else {
 
@@ -428,7 +439,7 @@ function wsConnect() {
 
                 if (dialogMsg.is(':visible')) {
                     var msgObj = JSON.parse(data.message);
-                    dialogMsg.html('<div class="infoBox info">Transferred ' + msgObj.current + ' of ' + msgObj.total + ' objects</div>');
+                    dialogMsg.html('<div class="infoBox info">' + msgObj.message + '</div>');
                 }
 
             } else if (command === 'FINISHED') { /*********************** FINISHED ************************/
@@ -464,7 +475,6 @@ function sendObj(obj, callback) {
     if (callback) {
         obj.callback = uuid.v4();
         StructrModel.callbacks[obj.callback] = callback;
-        log('stored callback', obj.callback, callback);
     }
 
     text = $.toJSON(obj);

@@ -22,6 +22,7 @@ var connectorStyle = localStorage.getItem(localStorageSuffix + 'connectorStyle')
 var remotePropertyKeys = [];
 
 $(document).ready(function() {
+
     Structr.registerModule('schema', _Schema);
     Structr.classes.push('schema');
 });
@@ -69,10 +70,15 @@ var _Schema = {
         _Schema.schema = [];
         _Schema.keys = [];
 
-        main.append('<div class="schema-input-container"><input class="schema-input" id="type-name" type="text" size="20" placeholder="New type"><button id="create-type" class="btn"><img src="icon/add.png"> Add Type</button></div>');
+        main.append('<div class="schema-input-container"></div>');
 
-        if (true) {
-            $('.schema-input-container').append('<input class="schema-input" id="ggist-url" type="text" size="30" placeholder="Enter a GraphGist raw URL"><button id="gg-import" class="btn">Start Import</button>');
+        var schemaContainer = $('.schema-input-container');
+
+        Structr.ensureIsAdmin(schemaContainer, function() {
+
+            schemaContainer.append('<input class="schema-input" id="type-name" type="text" size="20" placeholder="New type"><button id="create-type" class="btn"><img src="icon/add.png"> Add Type</button>');
+
+            schemaContainer.append('<input class="schema-input" id="ggist-url" type="text" size="30" placeholder="Enter a GraphGist raw URL"><button id="gg-import" class="btn">Start Import</button>');
             $('#gg-import').on('click', function(e) {
                 var btn = $(this);
                 var text = btn.text();
@@ -83,7 +89,7 @@ var _Schema = {
 
             var styles = ['Flowchart', 'Bezier', 'StateMachine', 'Straight'];
 
-            $('.schema-input-container').append('<select id="connector-style"></select>');
+            schemaContainer.append('<select id="connector-style"></select>');
             $.each(styles, function(i, style) {
                 $('#connector-style').append('<option value="' + style + '" ' + (style === connectorStyle ? 'selected="selected"' : '') + '>' + style + '</option>');
             });
@@ -94,7 +100,7 @@ var _Schema = {
                 _Schema.reload();
             });
 
-            $('.schema-input-container').append('<button class="btn" id="expand-all"><img alt="Expand all" src="icon/arrow_out.png"></button>');
+           schemaContainer.append('<button class="btn" id="expand-all"><img alt="Expand all" src="icon/arrow_out.png"></button>');
             $('#expand-all').on('click', function() {
                 $.each(Object.keys(nodes), function(i, id) {
                     if (_Schema.getMode(id) === 'compact') {
@@ -104,7 +110,7 @@ var _Schema = {
                 });
             });
 
-            $('.schema-input-container').append('<button class="btn" id="compact-all"><img alt="Compact all" src="icon/arrow_in.png"></button>');
+            schemaContainer.append('<button class="btn" id="compact-all"><img alt="Compact all" src="icon/arrow_in.png"></button>');
             $('#compact-all').on('click', function() {
                 $.each(Object.keys(nodes), function(i, id) {
                     if (_Schema.getMode(id) === 'expanded') {
@@ -115,99 +121,95 @@ var _Schema = {
                 instance.repaintEverything();
             });
 
-            $('.schema-input-container').append('<button class="btn" id="admin-tools"><img src="icon/wrench.png"> Tools</button>');
+            schemaContainer.append('<button class="btn" id="admin-tools"><img src="icon/wrench.png"> Tools</button>');
             $('#admin-tools').on('click', function() {
                 _Schema.openAdminTools();
             });
 
-            $('.schema-input-container').append('<button class="btn" id="sync-schema"><img src="icon/page_white_get.png"> Sync schema</button>');
+            schemaContainer.append('<button class="btn" id="sync-schema"><img src="icon/page_white_get.png"> Sync schema</button>');
             $('#sync-schema').on('click', function() {
                 _Schema.syncSchemaDialog();
             });
 
             /*
-             $('.schema-input-container').append('<button class="btn" id="do-layout"><img src="icon/wrench.png"> Layout</button>');
+             schemaContainer.append('<button class="btn" id="do-layout"><img src="icon/wrench.png"> Layout</button>');
              $('#do-layout').on('click', function() {
              _Schema.doLayout();
              });
 
-             $('.schema-input-container').append('<button class="btn" id="stop-layout"><img src="icon/wrench.png"> Stop</button>');
+             schemaContainer.append('<button class="btn" id="stop-layout"><img src="icon/wrench.png"> Stop</button>');
              $('#stop-layout').on('click', function() {
              _Layout.stopLayout();
              });
              */
-        }
 
-        $('#type-name').on('keyup', function(e) {
+            $('#type-name').on('keyup', function(e) {
 
-            if (e.keyCode === 13) {
-                e.preventDefault();
-                if ($('#type-name').val().length) {
-                    $('#create-type').click();
+                if (e.keyCode === 13) {
+                    e.preventDefault();
+                    if ($('#type-name').val().length) {
+                        $('#create-type').click();
+                    }
+                    return false;
                 }
-                return false;
-            }
 
-        });
-        $('#create-type').on('click', function() {
-            _Schema.createNode($('#type-name').val());
-        });
+            });
+            $('#create-type').on('click', function() {
+                _Schema.createNode($('#type-name').val());
+            });
 
-        jsPlumb.ready(function() {
-            main.append('<div class="canvas" id="schema-graph"></div>');
+            jsPlumb.ready(function() {
+                main.append('<div class="canvas" id="schema-graph"></div>');
 
-            canvas = $('#schema-graph');
-            _Schema.resize();
+                canvas = $('#schema-graph');
+                _Schema.resize();
 
-            instance = jsPlumb.getInstance({
-                //Connector: "StateMachine",
-                PaintStyle: {
-                    lineWidth: 5,
-                    strokeStyle: "#81ce25"
-                },
-                Endpoint: ["Dot", {radius: 6}],
-                EndpointStyle: {
-                    fillStyle: "#aaa"
-                },
-                Container: "schema-graph",
-                ConnectionOverlays: [
-                    ["PlainArrow", {
-                            location: 1,
-                            width: 15,
-                            length: 12
-                        }
+                instance = jsPlumb.getInstance({
+                    //Connector: "StateMachine",
+                    PaintStyle: {
+                        lineWidth: 5,
+                        strokeStyle: "#81ce25"
+                    },
+                    Endpoint: ["Dot", {radius: 6}],
+                    EndpointStyle: {
+                        fillStyle: "#aaa"
+                    },
+                    Container: "schema-graph",
+                    ConnectionOverlays: [
+                        ["PlainArrow", {
+                                location: 1,
+                                width: 15,
+                                length: 12
+                            }
+                        ]
                     ]
-                ]
-            });
-
-            _Schema.loadSchema(function() {
-                instance.bind('connection', function(info) {
-                    _Schema.connect(getIdFromIdString(info.sourceId), getIdFromIdString(info.targetId));
                 });
-                instance.bind('connectionDetached', function(info) {
-                    Structr.confirmation('<h3>Delete schema relationship?</h3>',
-                            function() {
-                                $.unblockUI({
-                                    fadeOut: 25
+
+                _Schema.loadSchema(function() {
+                    instance.bind('connection', function(info) {
+                        _Schema.connect(getIdFromIdString(info.sourceId), getIdFromIdString(info.targetId));
+                    });
+                    instance.bind('connectionDetached', function(info) {
+                        Structr.confirmation('<h3>Delete schema relationship?</h3>',
+                                function() {
+                                    $.unblockUI({
+                                        fadeOut: 25
+                                    });
+                                    _Schema.detach(info.connection.scope);
+                                    _Schema.reload();
                                 });
-                                _Schema.detach(info.connection.scope);
-                                _Schema.reload();
-                            });
-                    _Schema.reload();
+                        _Schema.reload();
+                    });
+
+                    reload = false;
                 });
-                
-                reload = false;
+
             });
-        });
 
-        $(document).keyup(function(e) {
-            if (e.keyCode === 27) {
-                dialogCancelButton.click();
-            }
-        });
-
-        $(window).on('resize', function() {
-            _Schema.resize();
+            $(window).off('resize');
+            $(window).on('resize', function() {
+                _Schema.resize();
+            });
         });
 
     },
@@ -416,8 +418,7 @@ var _Schema = {
                                             var overlay = rels[res.id].getOverlay('label');
                                             var l = $(overlay.getLabel()).text().trim();
                                             if ((overlay.getLabel().substring(0, 6) !== '<input')) {
-                                                overlay.setLabel('<input class="relationship-label" type="text" size="15" id="id_'
-                                                        + res.id + '_relationshipType" value="' + l + '">');
+                                                overlay.setLabel('<input class="relationship-label" type="text" size="15" id="id_' + res.id + '_relationshipType" value="' + l + '">');
                                                 $('.relationship-label').focus().on('blur', function() {
                                                     var label = ($(this).val() || '').trim();
                                                     _Schema.setRelationshipProperty(res, 'relationshipType', label);
@@ -583,6 +584,8 @@ var _Schema = {
 
         el.append('<div id="___' + entity.id + '" class="schema-details"><b>' + entity.relationshipType + '</b>'
                 //+ ' extends <select class="extends-class-select"><option value="org.structr.core.entity.AbstractRelationship">AbstractRelationship</option></select>'
+                + '<h3>Cascading Delete</h3><select id="cascading-delete-selector"><option value="0">NONE</option><option value="1">SOURCE_TO_TARGET</option><option value="2">TARGET_TO_SOURCE</option><option value="3">ALWAYS</option><option value="4">CONSTRAINT_BASED</option></select>'
+                + '<h3>Automatic Creation of Related Nodes</h3><select id="autocreate-selector"><option value="0">NONE</option><option value="1">SOURCE_TO_TARGET</option><option value="2">TARGET_TO_SOURCE</option><option value="3">ALWAYS</option></select>'
                 + '<h3>Local Attributes</h3><table class="local schema-props"><th>JSON Name</th><th>DB Name</th><th>Type</th><th>Format</th><th>Not null</th><th>Unique</th><th>Default</th><th>Action</th></table>'
                 + '<img alt="Add local attribute" class="add-icon add-local-attribute" src="icon/add.png">'
                 + '<h3>Actions</h3><table class="actions schema-props"><th>JSON Name</th><th>Code</th><th>Action</th></table>'
@@ -630,6 +633,36 @@ var _Schema = {
                 var self = $(this);
                 self.closest('tr').remove();
             });
+        });
+
+        $.get(rootUrl + entity.id, function(data) {
+            $('#cascading-delete-selector').val(data.result.cascadingDeleteFlag);
+        });
+
+        $('#cascading-delete-selector').on('change', function() {
+           var inp = $(this);
+           _Schema.setRelationshipProperty(entity, 'cascadingDeleteFlag', parseInt(inp.val()),
+           function() {
+               blinkGreen(inp);
+           },
+           function() {
+               blinkRed(inp);
+           });
+        });
+
+        $.get(rootUrl + entity.id, function(data) {
+            $('#autocreate-selector').val(data.result.autocreationFlag);
+        });
+
+        $('#autocreate-selector').on('change', function() {
+           var inp = $(this);
+           _Schema.setRelationshipProperty(entity, 'autocreationFlag', parseInt(inp.val()),
+           function() {
+               blinkGreen(inp);
+           },
+           function() {
+               blinkRed(inp);
+           });
         });
 
     },
@@ -721,7 +754,7 @@ var _Schema = {
 
                 var row = $('.new', el);
                 blinkGreen(row);
-                
+
                 _Schema.unbindEvents(key);
 
                 row.removeClass('new').addClass('local').addClass(key);
@@ -738,6 +771,7 @@ var _Schema = {
                 entity[key] = val;
             }, function() {
                 blinkRed($('.new', el));
+                _Schema.bindEvents(entity, type, key);
             });
         }
     },
@@ -745,9 +779,23 @@ var _Schema = {
         var stillUsed = false;
         var normalizedKey = normalizeAttr(key);
         Object.keys(entity).forEach(function(k) {
-            if (entity[k] && (typeof entity[k] === 'string') && entity[k].contains(normalizedKey)) {
-                stillUsed = true;
-                return;
+            if (entity[k] && (typeof entity[k] === 'string')) {
+
+                // check views for usage of this property
+                if (k.startsWith('__')) {
+                    var viewVars = entity[k].split(',');
+
+                    viewVars.forEach(function(viewVar){
+
+                        if (normalizeAttr(viewVar.trim()) === normalizedKey) {
+                            stillUsed = true;
+                        };
+                    });
+
+                    if (stillUsed) {
+                        return;
+                    }
+                }
             }
         });
 
@@ -755,9 +803,9 @@ var _Schema = {
             $('.local .' + key + ' .remove-icon').tooltip({
                 tooltipClass: 'tooltip',
                 items: '.remove-icon',
-                show: { effect: 'fadeIn', duration: 50 },
-                hide: { effect: 'fadeOut', duration: 1000 },
-                content: '<img src="/structr/icon/error.png"> <b>' + normalizedKey + '</b> is still in use.',
+                show: { effect: 'fadeIn', duration: 0 },
+                hide: { effect: 'fadeOut', delay: 1000, duration: 150 },
+                content: '<img src="/structr/icon/error.png"> The attribute <b>' + normalizedKey + '</b> cannot be removed because it is still referenced somewhere in the schema. Check also the methods, views, notion and function properties.',
                 position: { my: "right top", at: "right bottom", collision: "flipfit" },
 //                open: function() {
 //
@@ -766,7 +814,7 @@ var _Schema = {
                     $('.local .' + key + ' .remove-icon').tooltip('disable');
                     window.setTimeout(function() {
                         $('.local .' + key + ' .remove-icon').tooltip('destroy');
-                    }, 510);
+                    }, 1160);
                 }
             }).tooltip('open');
             return;
@@ -837,10 +885,12 @@ var _Schema = {
         var w = $(window).width() - 24;
         var h = $(window).height() - 140;
 
-        canvas.css({
-            width: w + 'px',
-            height: h + 'px',
-        });
+        if (canvas) {
+            canvas.css({
+                width: w + 'px',
+                height: h + 'px',
+            });
+        }
 
         $('body').css({
             position: 'relative',
@@ -860,92 +910,110 @@ var _Schema = {
 
         if (key.substring(0, 1) === '_') {
 
-            var name = key.substring(1);
-            var dbName = '';
-            var type;
-            if (res[key].indexOf('|') > -1) {
-                dbName = res[key].substring(0, res[key].indexOf('|'));
-                type = res[key].substring(res[key].indexOf('|') + 1);
-            } else {
-                type = res[key];
-            }
-
-            var notNull = (res[key].indexOf('+') > -1);
-            var unique = (res[key].indexOf('!') > -1);
-
-            type = type.replace('+', '').replace('!', '');
-
-            var defaultValue = '';
-            if (type.indexOf(':') > -1) {
-                defaultValue = (type.substring(type.indexOf(':') + 1));
-                type = type.substring(0, type.indexOf(':'));
-            }
-
-            var format;
-
-            if (type.startsWith('Function')) {
-                var l = type.length;
-                format = type.substring(0, l - 1).substring(9);
-                type = type.substring(0, 8);
-            } else {
-
-                if (type.indexOf('(') > -1) {
-                    var parts = type.split('(');
-                    type = parts[0];
-                    format = parts[1].replace(')', '');
-                }
-            }
+            var property = _Schema.property(res, key);
 
             if (compact) {
 
-                el.append('<tr class="' + key + '"><td>' + name + '</td>'
-                        + '<td>' + type + '</td>'
-                        + '<td>' + (format ? escapeForHtmlAttributes(format) : '') + '</td></div>');
+                el.append('<tr class="' + key + '"><td>' + property.name + '</td>'
+                        + '<td>' + property.type + '</td>'
+                        + '<td>' + (property.format ? escapeForHtmlAttributes(property.format) : '') + '</td></div>');
 
             } else {
 
-                el.append('<tr class="' + key + '"><td><input size="15" type="text" class="property-name" value="' + escapeForHtmlAttributes(name) + '"></td><td>'
-                        + '<input size="15" type="text" class="property-dbname" value="' + escapeForHtmlAttributes(dbName) + '"></td><td>'
+                el.append('<tr class="' + key + '"><td><input size="15" type="text" class="property-name" value="' + escapeForHtmlAttributes(property.name) + '"></td><td>'
+                        + '<input size="15" type="text" class="property-dbname" value="' + escapeForHtmlAttributes(property.dbName) + '"></td><td>'
                         + typeOptions + '</td><td><input size="15" type="text" class="property-format" value="'
-                        + (format ? escapeForHtmlAttributes(format) : '') + '"></td><td><input class="not-null" type="checkbox"'
-                        + (notNull ? ' checked="checked"' : '') + '></td><td><input class="unique" type="checkbox"'
-                        + (unique ? ' checked="checked"' : '') + '</td><td>'
-                        + '<input type="text" size="10" class="property-default" value="' + escapeForHtmlAttributes(defaultValue) + '">' + '</td><td><img alt="Remove" class="remove-icon remove-property" src="icon/delete.png"></td></div>');
+                        + (property.format ? escapeForHtmlAttributes(property.format) : '') + '"></td><td><input class="not-null" type="checkbox"'
+                        + (property.notNull ? ' checked="checked"' : '') + '></td><td><input class="unique" type="checkbox"'
+                        + (property.unique ? ' checked="checked"' : '') + '</td><td>'
+                        + '<input type="text" size="10" class="property-default" value="' + escapeForHtmlAttributes(property.defaultValue) + '">' + '</td><td><img alt="Remove" class="remove-icon remove-property" src="icon/delete.png"></td></div>');
 
-                _Schema.bindEvents(res, type, key);
+                _Schema.bindEvents(res, property.type, key);
             }
         }
 
     },
+    property: function(res, key) {
+        
+        var name = key.substring(1);
+        var dbName = '';
+        var type;
+        if (res[key].indexOf('|') > -1) {
+            dbName = res[key].substring(0, res[key].indexOf('|'));
+            type = res[key].substring(res[key].indexOf('|') + 1);
+        } else {
+            type = res[key];
+        }
+
+        var notNull = (res[key].indexOf('+') > -1);
+        var unique = (res[key].indexOf('!') > -1);
+
+        type = type.replace('+', '').replace('!', '');
+
+        var defaultValue = '';
+        var format = '';
+
+        var defaultBegin = type.indexOf(':');
+        var formatBegin = type.indexOf('(');
+
+        if (formatBegin > -1 && defaultBegin > -1 && defaultBegin > formatBegin) {
+            // we have a format string => we need to find the location of the matching closing bracket for the bracket at pos formatBegin
+
+            var defaultBegin = type.indexOf('):');
+            if (defaultBegin > -1) {
+                defaultBegin++;
+            }
+        }
+
+        if (defaultBegin > -1) {
+            defaultValue = (type.substring(defaultBegin + 1));
+            type = type.substring(0, defaultBegin);
+        }
+
+        if (formatBegin > -1) {
+            format = type.substring(formatBegin + 1, type.length - 1);
+            type = type.substring(0, formatBegin);
+        }
+        
+        return { type: type, name: name, dbName: dbName, notNull: notNull, unique: unique, defaultValue: defaultValue, format: format };
+        
+    },
     bindEvents: function(entity, type, key) {
 
-        var el = $('.local.schema-props');
+        if (key.substring(0, 1) !== '_') {
+            return;
+        }
         
+        var property = _Schema.property(entity, key);
+        
+        var el = $('.local.schema-props');
+
         $('.' + key + ' .property-type option[value="' + type + '"]', el).attr('selected', true).prop('disabled', null);
 
         $('.' + key + ' .property-type', el).on('change', function() {
             _Schema.savePropertyDefinition(entity, key);
-        }).prop('disabled', null);
+        }).prop('disabled', null).val(property.type);
 
         $('.' + key + ' .property-format', el).on('blur', function() {
             _Schema.savePropertyDefinition(entity, key);
-        }).prop('disabled', null);
+        }).prop('disabled', null).val(property.format);
 
         $('.' + key + ' .not-null', el).on('change', function() {
             _Schema.savePropertyDefinition(entity, key);
-        }).prop('disabled', null);
+        }).prop('disabled', null).val(property.notNull);
 
         $('.' + key + ' .unique', el).on('change', function() {
             _Schema.savePropertyDefinition(entity, key);
-        }).prop('disabled', null);
+        }).prop('disabled', null).val(property.unique);
 
         $('.' + key + ' .property-default', el).on('change', function() {
             _Schema.savePropertyDefinition(entity, key);
-        }).prop('disabled', null);
+        }).prop('disabled', null).val(property.defaultValue);
 
         $('.' + key + ' .remove-property', el).on('click', function() {
             _Schema.removeLocalProperty(entity, key);
         }).prop('disabled', null);
+        
 
     },
     unbindEvents: function(key) {
@@ -963,7 +1031,7 @@ var _Schema = {
         $('.' + key + ' .property-default', el).off('change').prop('disabled', 'disabled');
 
         $('.' + key + ' .remove-property', el).off('click').prop('disabled', 'disabled');
-        
+
     },
     appendRelatedProperty: function(el, rel, key, out) {
         remotePropertyKeys.push('_' + key);
@@ -974,13 +1042,13 @@ var _Schema = {
                 + (out ? '-' : '&lt;-') + '[:' + relType + ']' + (out ? '-&gt;' : '-') + '</td></tr>');
 
         $('.' + key + ' .property-name', el).on('blur', function() {
-            
+
             var newName = $(this).val();
 
             if (newName === '') {
                 newName = undefined;
             }
-            
+
             if (out) {
                 _Schema.setRelationshipProperty(rel, 'targetJsonName', newName, function() {
                     blinkGreen($('.' + key, el));
@@ -1104,10 +1172,11 @@ var _Schema = {
             d['_' + name] = val;
             _Schema.putPropertyDefinition(entity, JSON.stringify(d), function() {
                 blinkGreen($('.local .' + key));
-                _Schema.bindEvents(entity, type, key);
                 entity['_' + name] = val;
+                _Schema.bindEvents(entity, type, key);
             }, function() {
                 blinkRed($('.local .' + key));
+                 _Schema.bindEvents(entity, type, key);
             }, function() {
                 _Schema.bindEvents(entity, type, key);
             });
@@ -1189,19 +1258,19 @@ var _Schema = {
                 200: function(existingData) {
                     var changed = false;
                     Object.keys(obj).forEach(function(key) {
-                       
+
                         //console.log('existing value', existingData.result[key], 'new value', obj[key], 'equal?', existingData.result[key] === obj[key]);
-                        
+
                         if (existingData.result[key] !== obj[key]) {
                             changed |= true;
                         }
-                        
+
                     });
-                    
+
                     //console.log('any value changed?', changed);
-                    
+
                     if (changed) {
-                        
+
                         $.ajax({
                             url: rootUrl + entity.id,
                             type: 'PUT',
@@ -1223,15 +1292,15 @@ var _Schema = {
                                 }
                             }
                         });
-                        
+
                     } else {
-                        
+
                         if (onNoop) {
                             onNoop();
                         }
-                        
+
                     }
-                    
+
                 },
             }
         });
@@ -1344,6 +1413,9 @@ var _Schema = {
                             }
                         });
 
+                    } else {
+                        // force a schema-reload so that we dont break the relationships
+                        _Schema.reload();
                     }
                 }
             }

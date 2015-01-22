@@ -18,14 +18,16 @@
  */
 package org.structr.cloud.message;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
 import org.structr.cloud.CloudConnection;
 import org.structr.cloud.CloudService;
-import org.structr.cloud.ExportContext;
 import org.structr.cloud.transmission.PushTransmission;
 import org.structr.common.error.FrameworkException;
 import org.structr.core.graph.NodeInterface;
+import org.structr.core.graph.SyncCommand;
 import org.structr.dynamic.File;
 
 /**
@@ -48,7 +50,7 @@ public class PullNode extends NodeDataContainer {
 	}
 
 	@Override
-	public void onRequest(CloudConnection serverConnection, ExportContext context) throws IOException, FrameworkException {
+	public void onRequest(CloudConnection serverConnection) throws IOException, FrameworkException {
 
 		final Object value = serverConnection.getValue(key + "Nodes");
 		if (value instanceof List) {
@@ -64,16 +66,11 @@ public class PullNode extends NodeDataContainer {
 
 				serverConnection.send(new NodeDataContainer(node, nodeIndex));
 			}
-
-			context.progress();
 		}
 	}
 
 	@Override
-	public void onResponse(CloudConnection clientConnection, ExportContext context) throws IOException, FrameworkException {
-
-		context.progress();
-		clientConnection.send(ack());
+	public void onResponse(CloudConnection clientConnection) throws IOException, FrameworkException {
 	}
 
 	@Override
@@ -81,7 +78,20 @@ public class PullNode extends NodeDataContainer {
 	}
 
 	@Override
-	public Object getPayload() {
-		return null;
+	protected void deserializeFrom(DataInputStream inputStream) throws IOException {
+
+		this.key       = (String)SyncCommand.deserialize(inputStream);
+		this.nodeIndex = (Integer)SyncCommand.deserialize(inputStream);
+
+		super.deserializeFrom(inputStream);
+	}
+
+	@Override
+	protected void serializeTo(DataOutputStream outputStream) throws IOException {
+
+		SyncCommand.serialize(outputStream, key);
+		SyncCommand.serialize(outputStream, nodeIndex);
+
+		super.serializeTo(outputStream);
 	}
 }

@@ -3,22 +3,24 @@
  *
  * This file is part of Structr <http://structr.org>.
  *
- * Structr is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
+ * Structr is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version.
  *
- * Structr is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * Structr is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+ * A PARTICULAR PURPOSE. See the GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with Structr.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU General Public License along with
+ * Structr. If not, see <http://www.gnu.org/licenses/>.
  */
 package org.structr.core.entity;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -26,6 +28,7 @@ import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -47,9 +50,10 @@ import org.structr.common.error.ErrorBuffer;
 import org.structr.common.error.FrameworkException;
 import org.structr.common.error.NullArgumentToken;
 import org.structr.common.error.ReadOnlyPropertyToken;
+import org.structr.core.Export;
 import org.structr.core.GraphObject;
 import org.structr.core.IterableAdapter;
-import org.structr.core.Ownership;
+import org.structr.core.entity.relationship.Ownership;
 import org.structr.core.Services;
 import org.structr.core.app.StructrApp;
 import org.structr.core.converter.PropertyConverter;
@@ -58,13 +62,14 @@ import org.structr.core.graph.NodeInterface;
 import org.structr.core.graph.NodeRelationshipStatisticsCommand;
 import org.structr.core.graph.NodeService;
 import org.structr.core.graph.RelationshipFactory;
+import org.structr.core.graph.RelationshipInterface;
+import org.structr.core.parser.Functions;
 import org.structr.core.property.PropertyKey;
 import org.structr.core.property.PropertyMap;
 import org.structr.schema.SchemaHelper;
 import org.structr.schema.action.ActionContext;
 
 //~--- classes ----------------------------------------------------------------
-
 /**
  * Abstract base class for all node entities in structr.
  *
@@ -74,7 +79,7 @@ import org.structr.schema.action.ActionContext;
 public abstract class AbstractNode implements NodeInterface, AccessControllable {
 
 	private static final Map<Class, Object> relationshipTemplateInstanceCache = new LinkedHashMap<>();
-	private static final Logger logger                                        = Logger.getLogger(AbstractNode.class.getName());
+	private static final Logger logger = Logger.getLogger(AbstractNode.class.getName());
 
 	public static final View defaultView = new View(AbstractNode.class, PropertyView.Public, id, type);
 
@@ -84,22 +89,21 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 
 	private boolean readOnlyPropertiesUnlocked = false;
 
-	protected Class entityType                 = null;
-	protected Principal cachedOwnerNode        = null;
-	protected SecurityContext securityContext  = null;
-	protected String cachedUuid                = null;
-	protected Node dbNode                      = null;
+	protected Class entityType = null;
+	protected Principal cachedOwnerNode = null;
+	protected SecurityContext securityContext = null;
+	protected String cachedUuid = null;
+	protected Node dbNode = null;
 
 	//~--- constructors ---------------------------------------------------
-
-	public AbstractNode() {}
+	public AbstractNode() {
+	}
 
 	public AbstractNode(SecurityContext securityContext, final Node dbNode, final Class entityType) {
 		init(securityContext, dbNode, entityType);
 	}
 
 	//~--- methods --------------------------------------------------------
-
 	@Override
 	public void onNodeCreation() {
 	}
@@ -115,8 +119,8 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	@Override
 	public final void init(final SecurityContext securityContext, final Node dbNode, final Class entityType) {
 
-		this.dbNode          = dbNode;
-		this.entityType      = entityType;
+		this.dbNode = dbNode;
+		this.entityType = entityType;
 		this.securityContext = securityContext;
 	}
 
@@ -162,21 +166,19 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	@Override
 	public int compareTo(final NodeInterface node) {
 
-		if(node == null) {
+		if (node == null) {
 			return -1;
 		}
-
 
 		String name = getName();
 
-		if(name == null) {
+		if (name == null) {
 			return -1;
 		}
 
-
 		String nodeName = node.getName();
 
-		if(nodeName == null) {
+		if (nodeName == null) {
 			return -1;
 		}
 
@@ -193,12 +195,11 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	}
 
 	/**
-	 * Can be used to permit the setting of a read-only
-	 * property once. The lock will be restored automatically
-	 * after the next setProperty operation. This method exists
-	 * to prevent automatic set methods from setting a read-only
-	 * property while allowing a manual set method to override this
-	 * default behaviour.
+	 * Can be used to permit the setting of a read-only property once. The
+	 * lock will be restored automatically after the next setProperty
+	 * operation. This method exists to prevent automatic set methods from
+	 * setting a read-only property while allowing a manual set method to
+	 * override this default behaviour.
 	 */
 	@Override
 	public void unlockReadOnlyPropertiesOnce() {
@@ -245,7 +246,6 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	}
 
 	//~--- get methods ----------------------------------------------------
-
 	@Override
 	public PropertyKey getDefaultSortKey() {
 		return AbstractNode.name;
@@ -368,7 +368,7 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 		// check for custom view in content-type field
 		if (securityContext != null && securityContext.hasCustomView()) {
 
-			final Set<PropertyKey> keys  = new LinkedHashSet<>(StructrApp.getConfiguration().getPropertySet(entityType, propertyView));
+			final Set<PropertyKey> keys = new LinkedHashSet<>(StructrApp.getConfiguration().getPropertySet(entityType, propertyView));
 			final Set<String> customView = securityContext.getCustomView();
 
 			for (Iterator<PropertyKey> it = keys.iterator(); it.hasNext();) {
@@ -388,8 +388,8 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	/**
 	 * Return property value which is used for indexing.
 	 *
-	 * This is useful f.e. to filter markup from HTML to index only text,
-	 * or to get dates as long values.
+	 * This is useful f.e. to filter markup from HTML to index only text, or
+	 * to get dates as long values.
 	 *
 	 * @param key
 	 * @return property value for indexing
@@ -406,8 +406,8 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	}
 
 	/**
-	 * Returns the (converted, validated, transformed, etc.) property for the given
-	 * property key.
+	 * Returns the (converted, validated, transformed, etc.) property for
+	 * the given property key.
 	 *
 	 * @param <T>
 	 * @param key the property key to retrieve the value for
@@ -475,7 +475,7 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 
 					t.printStackTrace();
 
-					logger.log(Level.WARNING, "Unable to convert property {0} of type {1}: {2}", new Object[] {
+					logger.log(Level.WARNING, "Unable to convert property {0} of type {1}: {2}", new Object[]{
 						key.dbName(),
 						getClass().getSimpleName(),
 						t.getMessage()
@@ -485,7 +485,7 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 
 			// conversion failed, may the property value itself is comparable
 			if (propertyValue instanceof Comparable) {
-				return (Comparable)propertyValue;
+				return (Comparable) propertyValue;
 			}
 
 			// last try: convertFromInput to String to make comparable
@@ -504,13 +504,13 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	 * @return the property value for the given key as a Iterable
 	 */
 	public Iterable getIterableProperty(final PropertyKey<? extends Iterable> propertyKey) {
-		return (Iterable)getProperty(propertyKey);
+		return (Iterable) getProperty(propertyKey);
 	}
 
 	/**
-	 * Returns a list of related nodes for which a modification propagation is configured
-	 * via the relationship. Override this method to return a set of nodes that should
-	 * receive propagated modifications.
+	 * Returns a list of related nodes for which a modification propagation
+	 * is configured via the relationship. Override this method to return a
+	 * set of nodes that should receive propagated modifications.
 	 *
 	 * @return a set of nodes to which modifications should be propagated
 	 */
@@ -533,7 +533,7 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	private <A extends NodeInterface, B extends NodeInterface, T extends Target, R extends Relation<A, B, ManyStartpoint<A>, T>> Iterable<R> getIncomingRelationshipsAsSuperUser(final Class<R> type) {
 
 		final RelationshipFactory<R> factory = new RelationshipFactory<>(SecurityContext.getSuperUserInstance());
-		final R template                     = getRelationshipForType(type);
+		final R template = getRelationshipForType(type);
 
 		return new IterableAdapter<>(template.getSource().getRawSource(SecurityContext.getSuperUserInstance(), dbNode, null), factory);
 	}
@@ -575,9 +575,9 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	public <A extends NodeInterface, B extends NodeInterface, S extends Source, T extends Target, R extends Relation<A, B, S, T>> Iterable<R> getRelationships(final Class<R> type) {
 
 		final RelationshipFactory<R> factory = new RelationshipFactory<>(securityContext);
-		final R template                     = getRelationshipForType(type);
-		final Direction direction            = template.getDirectionForType(entityType);
-		final RelationshipType relType       = template;
+		final R template = getRelationshipForType(type);
+		final Direction direction = template.getDirectionForType(entityType);
+		final RelationshipType relType = template;
 
 		return new IterableAdapter<>(dbNode.getRelationships(relType, direction), factory);
 	}
@@ -586,8 +586,8 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	public <A extends NodeInterface, B extends NodeInterface, T extends Target, R extends Relation<A, B, OneStartpoint<A>, T>> R getIncomingRelationship(final Class<R> type) {
 
 		final RelationshipFactory<R> factory = new RelationshipFactory<>(securityContext);
-		final R template                     = getRelationshipForType(type);
-		final Relationship relationship      = template.getSource().getRawSource(securityContext, dbNode, null);
+		final R template = getRelationshipForType(type);
+		final Relationship relationship = template.getSource().getRawSource(securityContext, dbNode, null);
 
 		if (relationship != null) {
 			return factory.adapt(relationship);
@@ -600,7 +600,7 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	public <A extends NodeInterface, B extends NodeInterface, T extends Target, R extends Relation<A, B, ManyStartpoint<A>, T>> Iterable<R> getIncomingRelationships(final Class<R> type) {
 
 		final RelationshipFactory<R> factory = new RelationshipFactory<>(securityContext);
-		final R template                     = getRelationshipForType(type);
+		final R template = getRelationshipForType(type);
 
 		return new IterableAdapter<>(template.getSource().getRawSource(securityContext, dbNode, null), factory);
 	}
@@ -609,8 +609,8 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	public <A extends NodeInterface, B extends NodeInterface, S extends Source, R extends Relation<A, B, S, OneEndpoint<B>>> R getOutgoingRelationship(final Class<R> type) {
 
 		final RelationshipFactory<R> factory = new RelationshipFactory<>(securityContext);
-		final R template                     = getRelationshipForType(type);
-		final Relationship relationship      = template.getTarget().getRawSource(securityContext, dbNode, null);
+		final R template = getRelationshipForType(type);
+		final Relationship relationship = template.getTarget().getRawSource(securityContext, dbNode, null);
 
 		if (relationship != null) {
 			return factory.adapt(relationship);
@@ -623,7 +623,7 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	public <A extends NodeInterface, B extends NodeInterface, S extends Source, R extends Relation<A, B, S, ManyEndpoint<B>>> Iterable<R> getOutgoingRelationships(final Class<R> type) {
 
 		final RelationshipFactory<R> factory = new RelationshipFactory<>(securityContext);
-		final R template                     = getRelationshipForType(type);
+		final R template = getRelationshipForType(type);
 
 		return new IterableAdapter<>(template.getTarget().getRawSource(securityContext, dbNode, null), factory);
 	}
@@ -649,7 +649,8 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	}
 
 	/**
-	 * Returns the owner node of this node, following an INCOMING OWNS relationship.
+	 * Returns the owner node of this node, following an INCOMING OWNS
+	 * relationship.
 	 *
 	 * @return the owner node of this node
 	 */
@@ -669,7 +670,6 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 		return cachedOwnerNode;
 	}
 
-
 	/**
 	 * Returns the database ID of the owner node of this node.
 	 *
@@ -683,6 +683,7 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 
 	/**
 	 * Return a list with the connected principals (user, group, role)
+	 *
 	 * @return list with principals
 	 */
 	public List<Principal> getSecurityPrincipals() {
@@ -705,8 +706,8 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	private <A extends NodeInterface, B extends NodeInterface, T extends Target, R extends Relation<A, B, OneStartpoint<A>, T>> R getIncomingRelationshipAsSuperUser(final Class<R> type) {
 
 		final RelationshipFactory<R> factory = new RelationshipFactory<>(SecurityContext.getSuperUserInstance());
-		final R template                     = getRelationshipForType(type);
-		final Relationship relationship      = template.getSource().getRawSource(SecurityContext.getSuperUserInstance(), dbNode, null);
+		final R template = getRelationshipForType(type);
+		final Relationship relationship = template.getSource().getRawSource(SecurityContext.getSuperUserInstance(), dbNode, null);
 
 		if (relationship != null) {
 			return factory.adapt(relationship);
@@ -716,7 +717,8 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	}
 
 	/**
-	 * Return true if this node has a relationship of given type and direction.
+	 * Return true if this node has a relationship of given type and
+	 * direction.
 	 *
 	 * @param <A>
 	 * @param <B>
@@ -920,9 +922,9 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 	}
 
 	/**
-	 * Set a property in database backend. This method needs to be wrappend into
-	 * a StructrTransaction, otherwise Neo4j will throw a NotInTransactionException!
-	 * Set property only if value has changed.
+	 * Set a property in database backend. This method needs to be wrappend
+	 * into a StructrTransaction, otherwise Neo4j will throw a
+	 * NotInTransactionException! Set property only if value has changed.
 	 *
 	 * @param <T>
 	 * @param key
@@ -1041,7 +1043,7 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 
 	public static <A extends NodeInterface, B extends NodeInterface, R extends Relation<A, B, ?, ?>> R getRelationshipForType(final Class<R> type) {
 
-		R instance = (R)relationshipTemplateInstanceCache.get(type);
+		R instance = (R) relationshipTemplateInstanceCache.get(type);
 		if (instance == null) {
 
 			try {
@@ -1054,7 +1056,6 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 				// TODO: throw meaningful exception here,
 				// should be a RuntimeException that indicates
 				// wrong use of Relationships etc.
-
 				t.printStackTrace();
 			}
 		}
@@ -1072,107 +1073,206 @@ public abstract class AbstractNode implements NodeInterface, AccessControllable 
 		return SchemaHelper.replaceVariables(securityContext, this, actionContext, rawValue);
 	}
 
-	protected String[] split(final String source) {
+	@Override
+	public Object evaluate(final SecurityContext securityContext, final String key, final String defaultValue) throws FrameworkException {
 
-		ArrayList<String> tokens = new ArrayList<>(20);
-		boolean inDoubleQuotes = false;
-		boolean inSingleQuotes = false;
-		boolean ignoreNext = false;
-		int len = source.length();
-		int level = 0;
-		StringBuilder currentToken = new StringBuilder(len);
+		switch (key) {
 
-		for (int i = 0; i < len; i++) {
+			case "owner":
+				return getOwnerNode();
 
-			char c = source.charAt(i);
+			default:
 
-			// do not strip away separators in nested functions!
-			if ((level != 0) || (c != ',')) {
+				// evaluate object value or return default
+				Object value = getProperty(StructrApp.getConfiguration().getPropertyKeyForJSONName(entityType, key));
 
-				currentToken.append(c);
-			}
+				if (value != null) {
+					return value;
+				}
 
-			if (ignoreNext) {
+				value = invokeMethod(key, Collections.EMPTY_MAP);
+				if (value != null) {
+					return value;
+				}
 
-				ignoreNext = false;
-				continue;
+				return Functions.numberOrString(defaultValue);
+		}
+	}
 
-			}
+	@Override
+	public Object invokeMethod(final String methodName, final Map<String, Object> propertySet) throws FrameworkException {
 
-			switch (c) {
+		for (final Method method : StructrApp.getConfiguration().getExportedMethodsForType(entityType)) {
 
-				case '\\':
+			if (methodName.equals(method.getName())) {
 
-					ignoreNext = true;
+				if (method.getAnnotation(Export.class) != null) {
 
-					break;
+					try {
 
-				case '(':
-					level++;
+						// First, try if single parameter is a map, then directly invoke method
+						if (method.getParameterTypes().length == 1 && method.getParameterTypes()[0].equals(Map.class)) {
+							return method.invoke(this, propertySet);
+						}
 
-					break;
+						final Object[] parameters = extractParameters(propertySet, method.getParameterTypes());
+						return method.invoke(this, parameters);
 
-				case ')':
-					level--;
+					} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException t) {
 
-					break;
+						if (t instanceof FrameworkException) {
 
-				case '"':
-					if (inDoubleQuotes) {
+							throw (FrameworkException) t;
 
-						inDoubleQuotes = false;
+						} else if (t.getCause() instanceof FrameworkException) {
 
-						level--;
+							throw (FrameworkException) t.getCause();
 
-					} else {
+						} else {
 
-						inDoubleQuotes = true;
-
-						level++;
-
+							logger.log(Level.WARNING, "Unable to invoke method {0}: {1}", new Object[]{methodName, t.getMessage()});
+						}
 					}
-
-					break;
-
-				case '\'':
-					if (inSingleQuotes) {
-
-						inSingleQuotes = false;
-
-						level--;
-
-					} else {
-
-						inSingleQuotes = true;
-
-						level++;
-
-					}
-
-					break;
-
-				case ',':
-					if (level == 0) {
-
-						tokens.add(currentToken.toString().trim());
-						currentToken.setLength(0);
-
-					}
-
-					break;
-
+				}
 			}
-
 		}
 
-		if (currentToken.length() > 0) {
-
-			tokens.add(currentToken.toString().trim());
-		}
-
-		return tokens.toArray(new String[0]);
+		return null;
 
 	}
+
+	private Object[] extractParameters(Map<String, Object> properties, Class[] parameterTypes) {
+
+		final List<Object> values = new ArrayList<>(properties.values());
+		final List<Object> parameters = new ArrayList<>();
+		int index = 0;
+
+		// only try to convert when both lists have equal size
+		if (values.size() == parameterTypes.length) {
+
+			for (final Class parameterType : parameterTypes) {
+
+				final Object value = convert(values.get(index++), parameterType);
+				if (value != null) {
+
+					parameters.add(value);
+				}
+			}
+		}
+
+		return parameters.toArray(new Object[0]);
+	}
+
+	/*
+	 * Tries to convert the given value into an object
+	 * of the given type, using an intermediate type
+	 * of String for the conversion.
+	 */
+	private Object convert(Object value, Class type) {
+
+		Object convertedObject = null;
+
+		if (type.equals(String.class)) {
+
+			// strings can be returned immediately
+			return value.toString();
+
+		} else if (value instanceof Number) {
+
+			Number number = (Number) value;
+
+			if (type.equals(Integer.class) || type.equals(Integer.TYPE)) {
+				return number.intValue();
+
+			} else if (type.equals(Long.class) || type.equals(Long.TYPE)) {
+				return number.longValue();
+
+			} else if (type.equals(Double.class) || type.equals(Double.TYPE)) {
+				return number.doubleValue();
+
+			} else if (type.equals(Float.class) || type.equals(Float.TYPE)) {
+				return number.floatValue();
+
+			} else if (type.equals(Short.class) || type.equals(Integer.TYPE)) {
+				return number.shortValue();
+
+			} else if (type.equals(Byte.class) || type.equals(Byte.TYPE)) {
+				return number.byteValue();
+
+			}
+
+		} else if (value instanceof List) {
+
+			return value;
+
+		} else if (value instanceof Map) {
+			return value;
+		}
+
+		// fallback
+		try {
+
+			Method valueOf = type.getMethod("valueOf", String.class);
+			if (valueOf != null) {
+
+				convertedObject = valueOf.invoke(null, value.toString());
+
+			} else {
+
+				logger.log(Level.WARNING, "Unable to find static valueOf method for type {0}", type);
+			}
+
+		} catch (Throwable t) {
+
+			logger.log(Level.WARNING, "Unable to deserialize value {0} of type {1}, Class has no static valueOf method.", new Object[]{value, type});
+		}
+
+		return convertedObject;
+	}
+
+	// ----- Cloud synchronization and replication -----
+	@Override
+	public List<GraphObject> getSyncData() {
+		return new ArrayList<>(); // provide a basis for super.getSyncData() calls
+	}
+
+	@Override
+	public boolean isNode() {
+		return true;
+	}
+
+	@Override
+	public boolean isRelationship() {
+		return false;
+	}
+
+	@Override
+	public NodeInterface getSyncNode() {
+		return this;
+	}
+
+	@Override
+	public RelationshipInterface getSyncRelationship() {
+		throw new ClassCastException(this.getClass() + " cannot be cast to org.structr.core.graph.RelationshipInterface");
+	}
+
+	@Override
+	public void updateFromPropertyMap(final Map<String, Object> properties) throws FrameworkException {
+
+		// update all properties that exist in the source map
+		for (final Entry<String, Object> entry : properties.entrySet()) {
+
+			final String key = entry.getKey();
+			final Object val = entry.getValue();
+
+			if (val != null) {
+
+				getNode().setProperty(key, val);
+
+			} else {
+
+				getNode().removeProperty(key);
+			}
+		}
+	}
 }
-
-

@@ -32,6 +32,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.apache.commons.configuration.ConfigurationException;
+import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.neo4j.graphdb.GraphDatabaseService;
@@ -63,7 +65,7 @@ import org.structr.schema.ConfigurationProvider;
  */
 public class Services {
 
-	private static final Logger logger                       = Logger.getLogger(StructrApp.class.getName());
+	private static final Logger logger                          = Logger.getLogger(StructrApp.class.getName());
 	private static StructrConf baseConf                         = null;
 
 	// Configuration constants
@@ -85,6 +87,8 @@ public class Services {
 	public static final String SMTP_PORT                        = "smtp.port";
 	public static final String SMTP_USER                        = "smtp.user";
 	public static final String SMTP_PASSWORD                    = "smtp.password";
+	public static final String SMTP_USE_TLS                     = "smtp.tls.enabled";
+	public static final String SMTP_REQUIRE_TLS                 = "smtp.tls.required";
 	public static final String SUPERUSER_USERNAME               = "superuser.username";
 	public static final String SUPERUSER_PASSWORD               = "superuser.password";
 	public static final String TCP_PORT                         = "tcp.port";
@@ -241,15 +245,14 @@ public class Services {
 		logger.log(Level.INFO, "Reading {0}..", configFileName);
 
 		try {
-			final FileInputStream fis = new FileInputStream(configFileName);
-			structrConf.load(fis);
-			fis.close();
+//			final FileInputStream fis = new FileInputStream(configFileName);
+//			structrConf.load(fis);
+//			fis.close();
 
-		} catch (IOException ioex) {
+			structrConf.load(new PropertiesConfiguration(configFileName));
 
-			logger.log(Level.WARNING, "Unable to read configuration file {0}: {1}", new Object[] { configFileName, ioex.getMessage() } );
-
-			System.exit(1);
+		} catch (ConfigurationException ex) {
+			logger.log(Level.SEVERE, null, ex);
 		}
 
 		mergeConfiguration(config, structrConf);
@@ -287,6 +290,10 @@ public class Services {
 						if (service != null) {
 
 							service.initialized();
+
+						} else {
+
+							logger.log(Level.WARNING, "Service {0} was not started!", serviceClassName);
 						}
 
 					} catch (Throwable t) {
@@ -376,16 +383,16 @@ public class Services {
 	public void registerServiceClass(Class serviceClass) {
 
 		registeredServiceClasses.add(serviceClass);
-
-		// let service instance visit default configuration
-		try {
-
-			Service service = (Service)serviceClass.newInstance();
-			//service.modifyConfiguration(getBaseConfiguration());
-
-		} catch (Throwable t) {
-			t.printStackTrace();
-		}
+//
+//		// let service instance visit default configuration
+//		try {
+//
+//			serviceClass.newInstance();
+//			//service.modifyConfiguration(getBaseConfiguration());
+//
+//		} catch (Throwable t) {
+//			t.printStackTrace();
+//		}
 	}
 
 	public String getConfigurationValue(String key) {
@@ -465,13 +472,15 @@ public class Services {
 		attributes.remove(name);
 	}
 
-	private Service createService(Class serviceClass) throws InstantiationException, IllegalAccessException {
+	private Service createService(Class serviceClass) {
 
 		logger.log(Level.FINE, "Creating service ", serviceClass.getName());
 
-		Service service = (Service) serviceClass.newInstance();
+		Service service = null;
+
 		try {
 
+			service = (Service) serviceClass.newInstance();
 			service.initialize(getCurrentConfig());
 
 			if (service instanceof RunnableService) {
@@ -499,11 +508,14 @@ public class Services {
 
 			if (service.isVital()) {
 
-				logger.log(Level.SEVERE, "Vital service {0} failed to start with {1}, aborting.", new Object[] { service.getClass().getSimpleName(), t.getMessage() } );
+				logger.log(Level.SEVERE, "Vital service {0} failed to start: {1}. Aborting", new Object[] { service.getClass().getSimpleName(), t.getMessage() } );
 
 				// hard(est) exit
-				System.err.println("Vital service " + service.getClass().getSimpleName() + " failed to start with " + t.getMessage() + ", aborting.");
 				System.exit(1);
+
+			} else {
+
+				logger.log(Level.SEVERE, "Service {0} failed to start: {1}.", new Object[] { service.getClass().getSimpleName(), t.getMessage() } );
 			}
 		}
 

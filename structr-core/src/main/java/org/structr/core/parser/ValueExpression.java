@@ -36,7 +36,44 @@ public class ValueExpression extends Expression {
 	}
 
 	@Override
+	public String toString() {
+
+		final StringBuilder buf = new StringBuilder();
+
+		buf.append(keyword);
+		buf.append("(");
+
+		for (final Expression expr : expressions) {
+			buf.append(expr.toString());
+		}
+		buf.append(")");
+
+		return buf.toString();
+	}
+
+	@Override
 	public Object evaluate(final SecurityContext securityContext, final ActionContext ctx, final GraphObject entity) throws FrameworkException {
-		return ctx.getReferencedProperty(securityContext, entity, keyword);
+
+		Object value = ctx.getReferencedProperty(securityContext, entity, keyword, null);
+
+		for (final Expression expression : expressions) {
+
+			// evaluate expressions from left to right
+			value = expression.transform(securityContext, ctx, entity, value);
+		}
+
+		return value;
+	}
+
+	@Override
+	public Object transform(final SecurityContext securityContext, final ActionContext ctx, final GraphObject entity, final Object value) throws FrameworkException {
+
+		// evaluate dot syntax
+		if (keyword.startsWith(".") && value instanceof GraphObject) {
+
+			return ctx.getReferencedProperty(securityContext, entity, keyword.substring(1), value);
+		}
+
+		return value;
 	}
 }

@@ -76,6 +76,8 @@ import org.structr.schema.parser.Validator;
  */
 public class SchemaHelper {
 
+	private static final String WORD_SEPARATOR = "_";
+
 	public enum Type {
 
 		String, StringArray, Integer, Long, Double, Boolean, Enum, Date, Count, Function, Notion, Cypher, Join
@@ -128,7 +130,7 @@ public class SchemaHelper {
 
 		if (possibleEntityString.contains("/")) {
 
-			String[] names = StringUtils.split(possibleEntityString, "/");
+			final String[] names = StringUtils.split(possibleEntityString, "/");
 
 			for (String possibleEntityName : names) {
 
@@ -139,7 +141,7 @@ public class SchemaHelper {
 
 				if (normalizedType == null) {
 
-					normalizedType = StringUtils.capitalize(CaseHelper.toUpperCamelCase(PlingStemmer.stem(possibleEntityName)));
+					normalizedType = StringUtils.capitalize(CaseHelper.toUpperCamelCase(stem(possibleEntityName)));
 
 				}
 
@@ -158,7 +160,7 @@ public class SchemaHelper {
 
 			if (normalizedType == null) {
 
-				normalizedType = StringUtils.capitalize(CaseHelper.toUpperCamelCase(PlingStemmer.stem(possibleEntityString)));
+				normalizedType = StringUtils.capitalize(CaseHelper.toUpperCamelCase(stem(possibleEntityString)));
 
 			}
 
@@ -166,6 +168,29 @@ public class SchemaHelper {
 		}
 	}
 
+	private static String stem(final String term) {
+		
+		
+		String lastWord;
+		String begin = "";
+		
+		if (StringUtils.contains(term, WORD_SEPARATOR)) {
+			
+			lastWord = StringUtils.substringAfterLast(term, WORD_SEPARATOR);
+			begin = StringUtils.substringBeforeLast(term, WORD_SEPARATOR);
+			
+		} else {
+			
+			lastWord = term;
+			
+		}
+		
+		lastWord = PlingStemmer.stem(lastWord);
+		
+		return begin.concat(WORD_SEPARATOR).concat(lastWord);
+		
+	}
+	
 	public static Class getEntityClassForRawType(final String rawType) {
 
 		// first try: raw name
@@ -517,6 +542,7 @@ public class SchemaHelper {
 		src.append("import ").append(Export.class.getName()).append(";\n");
 		src.append("import ").append(View.class.getName()).append(";\n");
 		src.append("import ").append(List.class.getName()).append(";\n");
+		src.append("import ").append(Map.class.getName()).append(";\n");
 
 		if (hasUiClasses()) {
 			src.append("import org.structr.rest.RestMethodResult;\n");
@@ -629,10 +655,10 @@ public class SchemaHelper {
 			src.append("\n\t@Export\n");
 			src.append("\tpublic RestMethodResult ");
 			src.append(action.getName());
-			src.append("() throws FrameworkException {\n\n");
+			src.append("(final Map<String, Object> parameters) throws FrameworkException {\n\n");
 
 			src.append("\t\t");
-			src.append(action.getSource("this"));
+			src.append(action.getSource("this", true));
 			src.append(";\n\n");
 
 			src.append("\t\treturn new RestMethodResult(200);\n");
@@ -704,7 +730,7 @@ public class SchemaHelper {
 
 		src.append("\tpublic static boolean ");
 		src.append(type.getMethod());
-		src.append("(final AbstractNode obj, SecurityContext securityContext, ErrorBuffer errorBuffer) throws FrameworkException {\n\n");
+		src.append("(final AbstractNode obj, final SecurityContext securityContext, final ErrorBuffer errorBuffer) throws FrameworkException {\n\n");
 		src.append("\t\tboolean error = !obj.isValid(errorBuffer);\n\n");
 
 		if (!actionList.isEmpty()) {

@@ -18,10 +18,12 @@
  */
 package org.structr.cloud.message;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import org.structr.cloud.CloudConnection;
-import org.structr.cloud.ExportContext;
 import org.structr.common.error.FrameworkException;
+import org.structr.core.graph.SyncCommand;
 
 /**
  * Marks the end of a <code>FileNodeDataContainer</code>. This class does not contain binary content itself, its a marker only.
@@ -54,20 +56,34 @@ public class FileNodeEndChunk extends DataContainer {
 	}
 
 	@Override
-	public void onRequest(CloudConnection serverConnection, ExportContext context) throws IOException, FrameworkException {
-
+	public void onRequest(CloudConnection serverConnection) throws IOException, FrameworkException {
 		serverConnection.finishFile(this);
-		serverConnection.send(ack());
-
-		context.progress();
+		sendKeepalive(serverConnection);
 	}
 
 	@Override
-	public void onResponse(CloudConnection clientConnection, ExportContext context) throws IOException, FrameworkException {
-		context.progress();
+	public void onResponse(CloudConnection clientConnection) throws IOException, FrameworkException {
 	}
 
 	@Override
 	public void afterSend(CloudConnection conn) {
+	}
+
+	@Override
+	protected void deserializeFrom(DataInputStream inputStream) throws IOException {
+
+		this.containerId = (String)SyncCommand.deserialize(inputStream);
+		this.fileSize    = (Long)SyncCommand.deserialize(inputStream);
+
+		super.deserializeFrom(inputStream);
+	}
+
+	@Override
+	protected void serializeTo(DataOutputStream outputStream) throws IOException {
+
+		SyncCommand.serialize(outputStream, containerId);
+		SyncCommand.serialize(outputStream, fileSize);
+
+		super.serializeTo(outputStream);
 	}
 }

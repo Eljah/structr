@@ -21,13 +21,13 @@ package org.structr.core.property;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.apache.lucene.search.SortField;
 import org.neo4j.helpers.Predicate;
 import org.structr.common.SecurityContext;
 import org.structr.core.GraphObject;
 import org.structr.core.app.StructrApp;
 import org.structr.core.entity.AbstractNode;
 import org.structr.core.graph.CypherQueryCommand;
+import org.structr.schema.action.ActionContext;
 
 /**
  *
@@ -58,12 +58,14 @@ public class CypherQueryProperty extends AbstractReadOnlyProperty<List<GraphObje
 
 			try {
 
+				final String query = obj.replaceVariables(securityContext, new ActionContext(), this.format);
 				final Map<String, Object> parameters = new LinkedHashMap<>();
 
 				parameters.put("id", obj.getUuid());
 				parameters.put("type", obj.getType());
 
-				return StructrApp.getInstance(securityContext).command(CypherQueryCommand.class).execute(format, parameters);
+
+				return StructrApp.getInstance(securityContext).command(CypherQueryCommand.class).execute(query, parameters);
 
 			} catch (Throwable t) {
 				t.printStackTrace();
@@ -80,6 +82,6 @@ public class CypherQueryProperty extends AbstractReadOnlyProperty<List<GraphObje
 
 	@Override
 	public Integer getSortType() {
-		return SortField.INT;
+		return null; // use string sorting
 	}
 }

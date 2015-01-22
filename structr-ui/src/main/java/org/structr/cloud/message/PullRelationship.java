@@ -18,12 +18,14 @@
  */
 package org.structr.cloud.message;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
 import org.structr.cloud.CloudConnection;
-import org.structr.cloud.ExportContext;
 import org.structr.common.error.FrameworkException;
 import org.structr.core.graph.RelationshipInterface;
+import org.structr.core.graph.SyncCommand;
 
 /**
  * Encapsulates a pull request for a node
@@ -45,7 +47,7 @@ public class PullRelationship extends RelationshipDataContainer {
 	}
 
 	@Override
-	public void onRequest(CloudConnection serverConnection, ExportContext context) throws IOException, FrameworkException {
+	public void onRequest(CloudConnection serverConnection) throws IOException, FrameworkException {
 
 		final Object value = serverConnection.getValue(key + "Rels");
 		if (value instanceof List) {
@@ -58,12 +60,8 @@ public class PullRelationship extends RelationshipDataContainer {
 	}
 
 	@Override
-	public void onResponse(CloudConnection clientConnection, final ExportContext context) throws IOException, FrameworkException {
-
+	public void onResponse(CloudConnection clientConnection) throws IOException, FrameworkException {
 		clientConnection.storeRelationship(this);
-		context.progress();
-
-		clientConnection.send(ack());
 	}
 
 	@Override
@@ -71,7 +69,20 @@ public class PullRelationship extends RelationshipDataContainer {
 	}
 
 	@Override
-	public Object getPayload() {
-		return null;
+	protected void deserializeFrom(DataInputStream inputStream) throws IOException {
+
+		this.key       = (String)SyncCommand.deserialize(inputStream);
+		this.nodeIndex = (Integer)SyncCommand.deserialize(inputStream);
+
+		super.deserializeFrom(inputStream);
+	}
+
+	@Override
+	protected void serializeTo(DataOutputStream outputStream) throws IOException {
+
+		SyncCommand.serialize(outputStream, key);
+		SyncCommand.serialize(outputStream, nodeIndex);
+
+		super.serializeTo(outputStream);
 	}
 }

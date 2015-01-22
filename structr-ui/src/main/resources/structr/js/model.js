@@ -23,6 +23,14 @@ var StructrModel = {
     obj: function(id) {
         return StructrModel.objects[id];
     },
+    
+    ensureObject: function (entity) {
+        if (!entity || entity.id === undefined) {
+            return false;
+        }
+        return StructrModel.obj(entity.id);
+    },
+
     createSearchResult: function(data) {
 
         var obj = new StructrSearchResult(data);
@@ -65,6 +73,10 @@ var StructrModel = {
         } else if (data.isContent) {
 
             obj = new StructrContent(data);
+
+        } else if (data.isResourceAccess) {
+
+            obj = new StructrResourceAccess(data);
 
         } else if (data.isGroup) {
 
@@ -121,6 +133,11 @@ var StructrModel = {
      * Append and check expand status
      */
     append: function(obj, refId) {
+
+        if (obj.content) {
+            // only show the first 40 characters for content elements
+            obj.content = obj.content.substring(0, 40);
+        }
 
         var refNode = refId ? Structr.node(refId) : undefined;
 
@@ -615,7 +632,7 @@ StructrUser.prototype.setProperty = function(key, value, recursive, callback) {
 StructrUser.prototype.remove = function() {
     var user = this;
 
-    var group = StructrModel.obj(user.groups[0]);
+    var group = user.groups[0];
     var groupEl = Structr.node(group.id);
 
     user.groups = removeFromArray(user.groups, group);
@@ -623,7 +640,9 @@ StructrUser.prototype.remove = function() {
     group.members = removeFromArray(group.members, user);
     if (!group.members.length) {
         _Entities.removeExpandIcon(groupEl);
-        enable(groupEl.children('.delete_icon')[0]);
+        if (groupEl && groupEl.length) {
+            enable(groupEl.children('.delete_icon')[0]);
+        }
     }
 
     var userEl = Structr.node(user.id);
@@ -633,7 +652,7 @@ StructrUser.prototype.remove = function() {
         userEl.remove();
     }
 
-    _UsersAndGroups.appendUserElement(this);
+    _Security.appendUserElement(this);
 }
 
 StructrUser.prototype.append = function() {
@@ -641,11 +660,11 @@ StructrUser.prototype.append = function() {
     //console.log(user.groups);
     if (user.groups && user.groups.length) {
         var group = StructrModel.obj(user.groups[0]);
-        if (group) {
+        if (group && group.members) {
             group.members.push(user.id);
         }
     }
-    StructrModel.expand(_UsersAndGroups.appendUserElement(this, group), this);
+    StructrModel.expand(_Security.appendUserElement(this, group), this);
 }
 
 /**************************************
@@ -668,7 +687,30 @@ StructrGroup.prototype.setProperty = function(key, value, recursive, callback) {
 }
 
 StructrGroup.prototype.append = function(refNode) {
-    StructrModel.expand(_UsersAndGroups.appendGroupElement(this, refNode), this);
+    StructrModel.expand(_Security.appendGroupElement(this, refNode), this);
+}
+
+/**************************************
+ * Structr ResourceAccess
+ **************************************/
+
+function StructrResourceAccess(data) {
+    var self = this;
+    $.each(Object.keys(data), function(i, key) {
+        self[key] = data[key];
+    });
+}
+
+StructrResourceAccess.prototype.save = function() {
+    StructrModel.save(this.id);
+}
+
+StructrResourceAccess.prototype.setProperty = function(key, value, recursive, callback) {
+    Command.setProperty(this.id, key, value, recursive, callback);
+}
+
+StructrResourceAccess.prototype.append = function(refNode) {
+    StructrModel.expand(_Security.appendResourceAccessElement(this, refNode), this);
 }
 
 /**************************************

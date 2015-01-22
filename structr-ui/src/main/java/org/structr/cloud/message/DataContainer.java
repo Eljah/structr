@@ -18,9 +18,14 @@
  */
 package org.structr.cloud.message;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 import org.neo4j.graphdb.PropertyContainer;
+import org.structr.core.graph.SyncCommand;
 
 /**
  * Abstract superclass of {@link NodeDataContainer} and {@link RelationshipDataContainer}
@@ -51,18 +56,45 @@ public abstract class DataContainer extends Message {
 		return sequenceNumber;
 	}
 
-	@Override
-	public Object getPayload() {
-		return null;
-	}
-
 	// ----- protected methods -----
-	protected void collectProperties(final PropertyContainer propertyContainer) {
+	@Override
+	protected void deserializeFrom(DataInputStream inputStream) throws IOException {
 
-		for (String key : propertyContainer.getPropertyKeys()) {
+		this.sequenceNumber      = (Integer)SyncCommand.deserialize(inputStream);
+		final int num            = (Integer)SyncCommand.deserialize(inputStream);
 
-			Object value = propertyContainer.getProperty(key);
+		for (int i=0; i<num; i++) {
+
+			final String key   = (String)SyncCommand.deserialize(inputStream);
+			final Object value = SyncCommand.deserialize(inputStream);
+
 			properties.put(key, value);
 		}
 	}
+
+	@Override
+	protected void serializeTo(DataOutputStream outputStream) throws IOException {
+
+		SyncCommand.serialize(outputStream, sequenceNumber);
+		SyncCommand.serialize(outputStream, properties.size());
+
+		for (final Entry<String, Object> entry : properties.entrySet()) {
+
+			SyncCommand.serialize(outputStream, entry.getKey());
+			SyncCommand.serialize(outputStream, entry.getValue());
+		}
+	}
+
+	protected void collectProperties(final PropertyContainer propertyContainer, final Iterable<String> propertyKeys) {
+
+		for (String key : propertyKeys) {
+
+			Object value = propertyContainer.getProperty(key);
+			if (value != null) {
+
+				properties.put(key, value);
+			}
+		}
+	}
+
 }

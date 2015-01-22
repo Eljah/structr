@@ -22,7 +22,6 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,19 +34,19 @@ import org.neo4j.helpers.collection.Iterables;
 import org.structr.common.CaseHelper;
 import org.structr.common.PropertyView;
 import org.structr.common.SecurityContext;
-import org.structr.common.Syncable;
 import org.structr.common.ValidationHelper;
 import org.structr.common.View;
 import org.structr.common.error.ErrorBuffer;
 import org.structr.common.error.FrameworkException;
+import org.structr.core.GraphObject;
 import org.structr.core.Services;
 import org.structr.core.entity.AbstractNode;
 import org.structr.core.entity.AbstractRelationship;
 import org.structr.core.entity.ManyToMany;
+import org.structr.core.entity.Relation;
 import org.structr.core.entity.SchemaNode;
-import org.structr.core.graph.NodeInterface;
-import org.structr.core.graph.RelationshipInterface;
 import org.structr.core.graph.TransactionCommand;
+import org.structr.core.property.LongProperty;
 import org.structr.core.property.Property;
 import org.structr.core.property.PropertyKey;
 import org.structr.core.property.PropertyMap;
@@ -63,30 +62,35 @@ import org.structr.schema.parser.Validator;
  *
  * @author Christian Morgner
  */
-public class SchemaRelationship extends ManyToMany<SchemaNode, SchemaNode> implements Schema, Syncable {
+public class SchemaRelationship extends ManyToMany<SchemaNode, SchemaNode> implements Schema {
 
 	private static final Logger logger                      = Logger.getLogger(SchemaRelationship.class.getName());
 	private static final Pattern ValidKeyPattern            = Pattern.compile("[a-zA-Z_]+");
 
-	public static final Property<String> name             = new StringProperty("name").indexed();
-	public static final Property<String> relationshipType   = new StringProperty("relationshipType");
-	public static final Property<String> sourceMultiplicity = new StringProperty("sourceMultiplicity");
-	public static final Property<String> targetMultiplicity = new StringProperty("targetMultiplicity");
-	public static final Property<String> sourceNotion       = new StringProperty("sourceNotion");
-	public static final Property<String> targetNotion       = new StringProperty("targetNotion");
-	public static final Property<String> sourceJsonName     = new StringProperty("sourceJsonName");
-	public static final Property<String> targetJsonName     = new StringProperty("targetJsonName");
-	public static final Property<String> extendsClass       = new StringProperty("extendsClass").indexed();
+	public static final Property<String>  name                = new StringProperty("name").indexed();
+	public static final Property<String>  relationshipType    = new StringProperty("relationshipType");
+	public static final Property<String>  sourceMultiplicity  = new StringProperty("sourceMultiplicity");
+	public static final Property<String>  targetMultiplicity  = new StringProperty("targetMultiplicity");
+	public static final Property<String>  sourceNotion        = new StringProperty("sourceNotion");
+	public static final Property<String>  targetNotion        = new StringProperty("targetNotion");
+	public static final Property<String>  sourceJsonName      = new StringProperty("sourceJsonName");
+	public static final Property<String>  targetJsonName      = new StringProperty("targetJsonName");
+	public static final Property<String>  extendsClass        = new StringProperty("extendsClass").indexed();
+	public static final Property<Long>    cascadingDeleteFlag = new LongProperty("cascadingDeleteFlag");
+	public static final Property<Long>    autocreationFlag    = new LongProperty("autocreationFlag");
+
+	// internal, do not use externally
+	public static final Property<String>  sourceTypeName      = new StringProperty("__internal_Structr_sourceTypeName");
 
 
 	public static final View defaultView = new View(SchemaRelationship.class, PropertyView.Public,
 		name, sourceId, targetId, sourceMultiplicity, targetMultiplicity, sourceNotion, targetNotion, relationshipType,
-		sourceJsonName, targetJsonName, extendsClass
+		sourceJsonName, targetJsonName, extendsClass, cascadingDeleteFlag, autocreationFlag
 	);
 
 	public static final View uiView = new View(SchemaRelationship.class, PropertyView.Ui,
 		name, sourceId, targetId, sourceMultiplicity, targetMultiplicity, sourceNotion, targetNotion, relationshipType,
-		sourceJsonName, targetJsonName, extendsClass
+		sourceJsonName, targetJsonName, extendsClass, cascadingDeleteFlag, autocreationFlag
 	);
 
 	private Set<String> dynamicViews = new LinkedHashSet<>();
@@ -114,6 +118,16 @@ public class SchemaRelationship extends ManyToMany<SchemaNode, SchemaNode> imple
 	@Override
 	public String name() {
 		return "IS_RELATED_TO";
+	}
+
+	@Override
+	public int getCascadingDeleteFlag() {
+		return Relation.NONE;
+	}
+
+	@Override
+	public int getAutocreationFlag() {
+		return Relation.SOURCE_TO_TARGET;
 	}
 
 	@Override
@@ -402,7 +416,13 @@ public class SchemaRelationship extends ManyToMany<SchemaNode, SchemaNode> imple
 
 		SchemaHelper.formatImportStatements(src, baseType);
 
-		src.append("public class ").append(_className).append(" extends ").append(getBaseType()).append(" {\n\n");
+		src.append("public class ").append(_className).append(" extends ").append(getBaseType());
+
+		if ("OWNS".equals(getProperty(relationshipType))) {
+			src.append(" implements org.structr.core.entity.relationship.Ownership");
+		}
+
+		src.append(" {\n\n");
 
 		src.append(SchemaHelper.extractProperties(this, propertyNames, validators, enums, viewProperties, actions, errorBuffer));
 
@@ -457,6 +477,8 @@ public class SchemaRelationship extends ManyToMany<SchemaNode, SchemaNode> imple
 
 		SchemaHelper.formatValidators(src, validators);
 		SchemaHelper.formatSaveActions(src, actions);
+
+		formatRelationshipFlags(src);
 
 		src.append("}\n");
 
@@ -648,9 +670,9 @@ public class SchemaRelationship extends ManyToMany<SchemaNode, SchemaNode> imple
 
 	// ----- interface Syncable -----
 	@Override
-	public List<Syncable> getSyncData() {
+	public List<GraphObject> getSyncData() {
 
-		final List<Syncable> syncables = new LinkedList<>();
+		final List<GraphObject> syncables = super.getSyncData();
 
 		syncables.add(getSourceNode());
 		syncables.add(getTargetNode());
@@ -658,33 +680,69 @@ public class SchemaRelationship extends ManyToMany<SchemaNode, SchemaNode> imple
 		return syncables;
 	}
 
-	@Override
-	public boolean isNode() {
-		return false;
-	}
+	// ----- private methods -----
+	private void formatRelationshipFlags(final StringBuilder src) {
 
-	@Override
-	public boolean isRelationship() {
-		return true;
-	}
+		Long cascadingDelete = getProperty(cascadingDeleteFlag);
+		if (cascadingDelete != null) {
 
-	@Override
-	public NodeInterface getSyncNode() {
-		return null;
-	}
+			src.append("\n\t@Override\n");
+			src.append("\tpublic int getCascadingDeleteFlag() {\n");
 
-	@Override
-	public RelationshipInterface getSyncRelationship() {
-		return this;
-	}
+			switch (cascadingDelete.intValue()) {
 
-	@Override
-	public void updateFromPropertyMap(final PropertyMap properties) throws FrameworkException {
+				case Relation.ALWAYS :
+					src.append("\t\treturn Relation.ALWAYS;\n");
+					break;
 
-		// update all properties that exist in the source map
-		for (final Map.Entry<PropertyKey, Object> entry : properties.entrySet()) {
+				case Relation.CONSTRAINT_BASED :
+					src.append("\t\treturn Relation.CONSTRAINT_BASED;\n");
+					break;
 
-			setProperty(entry.getKey(), entry.getValue());
+				case Relation.SOURCE_TO_TARGET :
+					src.append("\t\treturn Relation.SOURCE_TO_TARGET;\n");
+					break;
+
+				case Relation.TARGET_TO_SOURCE :
+					src.append("\t\treturn Relation.TARGET_TO_SOURCE;\n");
+					break;
+
+				case Relation.NONE :
+
+				default :
+					src.append("\t\treturn Relation.NONE;\n");
+
+			}
+
+			src.append("\t}\n\n");
+		}
+
+		Long autocreate = getProperty(autocreationFlag);
+		if (autocreate != null) {
+
+			src.append("\n\t@Override\n");
+			src.append("\tpublic int getAutocreationFlag() {\n");
+
+			switch (autocreate.intValue()) {
+
+				case Relation.ALWAYS :
+					src.append("\t\treturn Relation.ALWAYS;\n");
+					break;
+
+				case Relation.SOURCE_TO_TARGET :
+					src.append("\t\treturn Relation.SOURCE_TO_TARGET;\n");
+					break;
+
+				case Relation.TARGET_TO_SOURCE :
+					src.append("\t\treturn Relation.TARGET_TO_SOURCE;\n");
+					break;
+
+				default :
+					src.append("\t\treturn Relation.NONE;\n");
+
+			}
+
+			src.append("\t}\n\n");
 		}
 	}
 

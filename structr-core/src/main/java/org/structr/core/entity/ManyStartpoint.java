@@ -18,8 +18,11 @@
  */
 package org.structr.core.entity;
 
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Relationship;
@@ -40,30 +43,32 @@ import org.structr.core.graph.NodeInterface;
  */
 public class ManyStartpoint<S extends NodeInterface> extends AbstractEndpoint implements Source<Iterable<Relationship>, Iterable<S>> {
 
+	private static final Logger logger = Logger.getLogger(ManyStartpoint.class.getName());
+
 	private Relation<S, ?, ManyStartpoint<S>, ?> relation = null;
-	
+
 	public ManyStartpoint(final Relation<S, ?, ManyStartpoint<S>, ?> relation) {
 		this.relation = relation;
 	}
-	
+
 	@Override
 	public Iterable<S> get(final SecurityContext securityContext, final NodeInterface node, final Predicate<GraphObject> predicate) {
-		
+
 		final NodeFactory<S> nodeFactory  = new NodeFactory<>(securityContext);
 		final Iterable<Relationship> rels = getRawSource(securityContext, node.getNode(), predicate);
-		
+
 		if (rels != null) {
-			
+
 			return Iterables.map(nodeFactory, Iterables.map(new Function<Relationship, Node>() {
 
 				@Override
 				public Node apply(Relationship from) {
 					return from.getStartNode();
 				}
-				
+
 			}, rels));
 		}
-		
+
 		return null;
 	}
 
@@ -79,13 +84,13 @@ public class ManyStartpoint<S extends NodeInterface> extends AbstractEndpoint im
 		}
 
 		// create intersection of both sets
-		final Set<S> intersection = new LinkedHashSet<>(toBeCreated);
+		final Set<S> intersection = new HashSet<>(toBeCreated);
 		intersection.retainAll(toBeDeleted);
 
 		// intersection needs no change
 		toBeCreated.removeAll(intersection);
 		toBeDeleted.removeAll(intersection);
-		
+
 		// remove existing relationships
 		for (S sourceNode : toBeDeleted) {
 
@@ -93,21 +98,31 @@ public class ManyStartpoint<S extends NodeInterface> extends AbstractEndpoint im
 
 				final String relTypeName    = rel.getRelType().name();
 				final String desiredRelType = relation.name();
-				
-				if (relTypeName.equals(desiredRelType) && rel.getSourceNode().equals(sourceNode)) {
 
-					app.delete(rel);
+				if (sourceNode.equals(targetNode)) {
+
+					logger.log(Level.WARNING, "Preventing deletion of self relationship {0}-[{1}]->{2}. If you experience issue with this, please report to team@structr.com.", new Object[] { sourceNode, rel.getRelType().name(), targetNode } );
+
+					// skip self relationships
+					continue;
 				}
 
+				if (relTypeName.equals(desiredRelType) && rel.getSourceNode().equals(sourceNode)) {
+					app.delete(rel);
+				}
 			}
 		}
-		
+
 		// create new relationships
 		for (S sourceNode : toBeCreated) {
 
-			relation.ensureCardinality(securityContext, sourceNode, targetNode);
-			
-			app.create(sourceNode, targetNode, relation.getClass(), getNotionProperties(securityContext, relation.getClass(), sourceNode.getUuid()));
+			if (sourceNode != null && targetNode != null) {
+
+				final String storageKey = sourceNode.getName() + relation.name() + targetNode.getName();
+
+				relation.ensureCardinality(securityContext, sourceNode, targetNode);
+				app.create(sourceNode, targetNode, relation.getClass(), getNotionProperties(securityContext, relation.getClass(), storageKey));
+			}
 		}
 	}
 

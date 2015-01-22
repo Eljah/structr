@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.StringWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -220,16 +221,16 @@ public class Importer {
 				HttpResponse resp = client.execute(get);
 
 				Header location = resp.getFirstHeader("Location");
-				
+
 				logger.log(Level.INFO, "Location: {0}", new Object[]{ location });
-				
+
 				if (location != null) {
 
 					final String newLocation = new URL(originalUrl, location.getValue()).toString();
 					address = newLocation;
-					
+
 					logger.log(Level.INFO, "New location: {0}", new Object[]{ newLocation });
-					
+
 					client = new DefaultHttpClient();
 
 					int attempts = 1;
@@ -306,9 +307,14 @@ public class Importer {
 		createChildNodes(parsedDocument.body(), parent, page);
 	}
 
-	public void createChildNodesWithHtml(final DOMNode parent, final Page page) throws FrameworkException {
+	public void createChildNodes(final DOMNode parent, final Page page, final boolean removeHashAttribute) throws FrameworkException {
 
-		createChildNodes(parsedDocument, parent, page);
+		createChildNodes(parsedDocument.body(), parent, page, removeHashAttribute);
+	}
+
+	public void createChildNodesWithHtml(final DOMNode parent, final Page page, final boolean removeHashAttribute) throws FrameworkException {
+
+		createChildNodes(parsedDocument, parent, page, removeHashAttribute);
 	}
 
 	public void importDataComments() throws FrameworkException {
@@ -320,7 +326,12 @@ public class Importer {
 	// ----- public static methods -----
 	public static Page parsePageFromSource(final SecurityContext securityContext, final String source, final String name) throws FrameworkException {
 
-		final Importer importer = new Importer(securityContext, source, null, "source", 0, true, true);
+		return parsePageFromSource(securityContext, source, name, false);
+	}
+
+	public static Page parsePageFromSource(final SecurityContext securityContext, final String source, final String name, final boolean removeHashAttribute) throws FrameworkException {
+
+		final Importer importer = new Importer(securityContext, source, null, "source", 0, false, false);
 		final App localAppCtx   = StructrApp.getInstance(securityContext);
 		Page page               = null;
 
@@ -330,7 +341,7 @@ public class Importer {
 
 			if (importer.parse()) {
 
-				importer.createChildNodesWithHtml(page, page);
+				importer.createChildNodesWithHtml(page, page, removeHashAttribute);
 			}
 
 			tx.success();
@@ -340,7 +351,19 @@ public class Importer {
 		return page;
 	}
 
-	public static List<InvertibleModificationOperation> diffPages(final Page sourcePage, final Page modifiedPage) {
+	public static List<InvertibleModificationOperation> diffNodes(final DOMNode sourceNode, final DOMNode modifiedNode) {
+
+		if (sourceNode == null) {
+
+			logger.log(Level.WARNING, "Source node was null, returning empty change set.");
+			return Collections.EMPTY_LIST;
+		}
+
+		if (modifiedNode == null) {
+
+			logger.log(Level.WARNING, "Modified node was null, returning empty change set.");
+			return Collections.EMPTY_LIST;
+		}
 
 		final List<InvertibleModificationOperation> changeSet = new LinkedList<>();
 		final Map<String, DOMNode> indexMappedExistingNodes   = new LinkedHashMap<>();
@@ -350,8 +373,8 @@ public class Importer {
 		final Map<String, DOMNode> hashMappedNewNodes         = new LinkedHashMap<>();
 		final Map<DOMNode, Integer> depthMappedNewNodes       = new LinkedHashMap<>();
 
-		InvertibleModificationOperation.collectNodes(sourcePage, indexMappedExistingNodes, hashMappedExistingNodes, depthMappedExistingNodes);
-		InvertibleModificationOperation.collectNodes(modifiedPage, indexMappedNewNodes, hashMappedNewNodes, depthMappedNewNodes);
+		InvertibleModificationOperation.collectNodes(sourceNode, indexMappedExistingNodes, hashMappedExistingNodes, depthMappedExistingNodes);
+		InvertibleModificationOperation.collectNodes(modifiedNode, indexMappedNewNodes, hashMappedNewNodes, depthMappedNewNodes);
 
 		// iterate over existing nodes and try to find deleted ones
 		for (final Iterator<Map.Entry<String, DOMNode>> it = hashMappedExistingNodes.entrySet().iterator(); it.hasNext();) {
@@ -475,7 +498,11 @@ public class Importer {
 	}
 
 	// ----- private methods -----
-	private void createChildNodes(final Node startNode, final DOMNode parent, Page page) throws FrameworkException {
+	private void createChildNodes(final Node startNode, final DOMNode parent, final Page page) throws FrameworkException {
+		createChildNodes(startNode, parent, page, false);
+	}
+
+	private void createChildNodes(final Node startNode, final DOMNode parent, final Page page, final boolean removeHashAttribute) throws FrameworkException {
 
 		Linkable res = null;
 		final List<Node> children = startNode.childNodes();
@@ -519,6 +546,13 @@ public class Importer {
 
 					String downloadAddress = node.attr(downloadAddressAttr);
 					res = downloadFile(downloadAddress, originalUrl);
+
+				}
+
+				if (removeHashAttribute) {
+
+					// Remove data-structr-hash attribute
+					node.removeAttr(DOMNode.dataHashProperty.jsonName());
 
 				}
 
@@ -682,7 +716,7 @@ public class Importer {
 				// Link new node to its parent node
 				// linkNodes(parent, newNode, page, localIndex);
 				// Step down and process child nodes
-				createChildNodes(node, newNode, page);
+				createChildNodes(node, newNode, page, removeHashAttribute);
 
 			}
 		}
@@ -713,7 +747,7 @@ public class Importer {
 		long size;
 		long checksum;
 		URL downloadUrl;
-		
+
 		try {
 
 			downloadUrl = new URL(base, downloadAddress);
@@ -735,9 +769,9 @@ public class Importer {
 
 			try {
 				// Try alternative baseUrl with trailing "/"
-				
+
 				logger.log(Level.INFO, "Starting download from alternative URL {0} {1} {2}", new Object[] { originalUrl, address.concat("/"), downloadAddress });
-				
+
 				downloadUrl = new URL(new URL(originalUrl, address.concat("/")), downloadAddress);
 				FileUtils.copyURLToFile(downloadUrl, fileOnDisk);
 

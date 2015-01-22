@@ -18,18 +18,19 @@
  */
 package org.structr.core.property;
 
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import org.apache.commons.collections.ListUtils;
-import org.junit.Assert;
+import java.util.Map;
 
 
 import org.structr.common.StructrTest;
 import org.structr.common.error.FrameworkException;
 import org.structr.core.converter.PropertyConverter;
+import org.structr.core.entity.SchemaNode;
 import org.structr.core.entity.TestOne;
 import org.structr.core.entity.TestSix;
+import org.structr.core.entity.relationship.SchemaRelationship;
 import org.structr.core.graph.Tx;
 
 /**
@@ -39,7 +40,7 @@ import org.structr.core.graph.Tx;
 public class CollectionPropertyTest extends StructrTest {
 
 	public void testOneToMany() throws Exception {
-		
+
 		TestOne testOne                   = null;
 		List<TestSix> testSixs            = null;
 		List<TestSix> testSixs2           = null;
@@ -47,7 +48,7 @@ public class CollectionPropertyTest extends StructrTest {
 
 		List<Integer> index1              = new LinkedList();
 		List<Integer> index2              = new LinkedList();
-		
+
 		try (final Tx tx = app.tx()) {
 
 			testOne        = createTestNode(TestOne.class);
@@ -63,13 +64,13 @@ public class CollectionPropertyTest extends StructrTest {
 			testOne.setProperty(TestOne.manyToManyTestSixs, testSixs);
 
 			tx.success();
-			
+
 		}
-		
+
 		try (final Tx tx = app.tx()) {
 
 			testSixs2 = testOne.getProperty(TestOne.manyToManyTestSixs);
-			
+
 			for (final TestSix testSix : testSixs2) {
 				int i = testSix.getProperty(TestSix.index);
 				System.out.println(i + " ");
@@ -77,12 +78,12 @@ public class CollectionPropertyTest extends StructrTest {
 			}
 
 			assertEquals(index1, index2);
-			
+
 			tx.success();
-			
+
 		}
-		
-		
+
+
 	}
 
 	public void testManyToMany() throws Exception {
@@ -152,25 +153,78 @@ public class CollectionPropertyTest extends StructrTest {
 
 				assertEquals(oneTestOnesFromTestSix1.get(0).getUuid(), testOne1.getUuid());
 			}
-			
+
 		} catch (FrameworkException fex) {
-			
+
 		}
-		
+
 	}
-	
-	public void testCascadingDelete() {
-		
-		
+
+	public void testCardinalityEnforcement() {
+
+		// try to recreate the error case where a standalone schema relationship is deleted
+		// because of a self-relationship on the end node of that schema node.
+		SchemaNode task    = null;
+		SchemaNode worker  = null;
+
+		try (final Tx tx = app.tx()) {
+
+			// internal stuff: simulate "foreign properties"
+			Map<String, PropertyMap> notionPropertyMap = new HashMap<>();
+			securityContext.setAttribute("notionProperties", notionPropertyMap);
+
+			task    = createTestNode(SchemaNode.class, "Task");
+			worker  = createTestNode(SchemaNode.class, "Worker");
+
+			// simulate existance of "foreign properties" in JSON
+			final PropertyMap taskTaskProperties = new PropertyMap();
+			taskTaskProperties.put(SchemaRelationship.relationshipType, "SUBTASK");
+			notionPropertyMap.put("TaskIS_RELATED_TOTask", taskTaskProperties);
+
+			task.setProperty(SchemaNode.relatedTo, toList(task));
+
+			// simulate existance of "foreign properties" in JSON
+			final PropertyMap workerTaskProperties = new PropertyMap();
+			workerTaskProperties.put(SchemaRelationship.relationshipType, "WORKS_ON");
+			notionPropertyMap.put("WorkerIS_RELATED_TOTask", workerTaskProperties);
+
+			task.setProperty(SchemaNode.relatedFrom, toList(worker));
+
+			tx.success();
+
+		} catch (FrameworkException fex) {
+			fex.printStackTrace();
+			fail("Unexpected exception.");
+		}
+
+		try (final Tx tx = app.tx()) {
+
+			// check condition, relationship task->task still exists
+			final List<SchemaNode> relatedTos   = task.getProperty(SchemaNode.relatedTo);
+			final List<SchemaNode> relatedFroms = task.getProperty(SchemaNode.relatedFrom);
+
+			assertEquals("Invalid cardinality result", 1, relatedTos.size());
+			assertEquals("Invalid cardinality result", 2, relatedFroms.size());
+
+			tx.success();
+
+		} catch (FrameworkException fex) {
+			fex.printStackTrace();
+			fail("Unexpected exception.");
+		}
+
+
+
+
 	}
-	
+
 	/**
 	 * Test of typeName method, of class CollectionProperty.
 	 */
 	public void testTypeName() {
 
 		Property<List<TestOne>> instance = TestSix.manyToManyTestOnes;
-		String expResult = "Object";
+		String expResult = "collection";
 		String result = instance.typeName();
 		assertEquals(expResult, result);
 	}
@@ -193,7 +247,7 @@ public class CollectionPropertyTest extends StructrTest {
 
 		Property<List<TestOne>> instance = TestSix.manyToManyTestOnes;
 		PropertyConverter result = instance.inputConverter(securityContext);
-		
+
 		assertTrue(result != null);
 	}
 

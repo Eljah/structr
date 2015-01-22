@@ -18,12 +18,14 @@
  */
 package org.structr.cloud.message;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import org.structr.cloud.CloudConnection;
-import org.structr.cloud.ExportContext;
 import org.structr.common.error.FrameworkException;
 import org.structr.core.entity.AbstractNode;
 import org.structr.core.graph.NodeInterface;
+import org.structr.core.graph.SyncCommand;
 
 /**
  * Serializable data container for a node to be transported over network.
@@ -42,13 +44,17 @@ public class NodeDataContainer extends DataContainer {
 	}
 
 	public NodeDataContainer(final NodeInterface node, final int sequenceNumber) throws FrameworkException {
+		this(node, sequenceNumber, node.getNode().getPropertyKeys());
+	}
+
+	public NodeDataContainer(final NodeInterface node, final int sequenceNumber, final Iterable<String> propertyKeys) throws FrameworkException {
 
 		super(sequenceNumber);
 
 		type         = node.getClass().getSimpleName();
 		sourceNodeId = node.getUuid();
 
-		collectProperties(node.getNode());
+		collectProperties(node.getNode(), propertyKeys);
 	}
 
 	/**
@@ -65,20 +71,34 @@ public class NodeDataContainer extends DataContainer {
 	}
 
 	@Override
-	public void onRequest(CloudConnection serverConnection, ExportContext context) throws IOException, FrameworkException {
-
+	public void onRequest(CloudConnection serverConnection) throws IOException, FrameworkException {
 		serverConnection.storeNode(this);
-		serverConnection.send(ack());
-
-		context.progress();
+		sendKeepalive(serverConnection);
 	}
 
 	@Override
-	public void onResponse(CloudConnection clientConnection, ExportContext context) throws IOException, FrameworkException {
-		context.progress();
+	public void onResponse(CloudConnection clientConnection) throws IOException, FrameworkException {
 	}
 
 	@Override
 	public void afterSend(CloudConnection conn) {
+	}
+
+	@Override
+	protected void deserializeFrom(DataInputStream inputStream) throws IOException {
+
+		this.sourceNodeId = (String)SyncCommand.deserialize(inputStream);
+		this.type         = (String)SyncCommand.deserialize(inputStream);
+
+		super.deserializeFrom(inputStream);
+	}
+
+	@Override
+	protected void serializeTo(DataOutputStream outputStream) throws IOException {
+
+		SyncCommand.serialize(outputStream, sourceNodeId);
+		SyncCommand.serialize(outputStream, type);
+
+		super.serializeTo(outputStream);
 	}
 }

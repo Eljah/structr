@@ -20,13 +20,12 @@ package org.structr.cloud;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.security.InvalidKeyException;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -48,12 +47,13 @@ import org.structr.cloud.message.Message;
 import org.structr.cloud.message.NodeDataContainer;
 import org.structr.cloud.message.RelationshipDataContainer;
 import org.structr.cloud.message.SyncableInfo;
+import org.structr.cloud.sync.Ping;
 import org.structr.common.AccessMode;
 import org.structr.common.SecurityContext;
-import org.structr.common.Syncable;
 import org.structr.common.error.FrameworkException;
 import org.structr.core.GraphObject;
 import org.structr.core.Services;
+import org.structr.core.TransactionSource;
 import org.structr.core.app.App;
 import org.structr.core.app.StructrApp;
 import org.structr.core.entity.Principal;
@@ -73,7 +73,7 @@ import org.structr.web.entity.dom.Page;
  *
  * @author Christian Morgner
  */
-public class CloudConnection<T> extends Thread {
+public class CloudConnection<T> extends Thread implements TransactionSource {
 
 	// the logger
 	private static final Logger logger = Logger.getLogger(CloudConnection.class.getName());
@@ -85,28 +85,31 @@ public class CloudConnection<T> extends Thread {
 
 	// private fields
 	private final ConfigurationProvider config = Services.getInstance().getConfigurationProvider();
-	private final Set<String> localMessageIds = new LinkedHashSet<>();
-	private App app = StructrApp.getInstance();
-	private long transmissionAbortTime = 0L;
-	private ExportContext context = null;
-	private boolean authenticated = false;
-	private String errorMessage = null;
-	private int errorCode = 0;
-	private String password = null;
-	private Cipher encrypter = null;
-	private Cipher decrypter = null;
-	private Receiver receiver = null;
-	private Sender sender = null;
-	private Socket socket = null;
-	private T payload = null;
-	private Tx tx = null;
+	private App app                            = StructrApp.getInstance();
+	private CloudListener listener             = null;
+	private long transmissionAbortTime         = 0L;
+	private boolean authenticated              = false;
+	private String errorMessage                = null;
+	private String remoteAddress               = null;
+	private int errorCode                      = 0;
+	private String password                    = null;
+	private Cipher encrypter                   = null;
+	private Cipher decrypter                   = null;
+	private Receiver receiver                  = null;
+	private Sender sender                      = null;
+	private Socket socket                      = null;
+ 	private T payload                          = null;
+ 	private Tx tx                              = null;
+	private int count                          = 0;
+	private int total                          = 0;
 
-	public CloudConnection(final Socket socket, final ExportContext context) {
+	public CloudConnection(final Socket socket, final CloudListener listener) {
 
 		super("CloudConnection(" + socket.getRemoteSocketAddress() + ")");
 
-		this.socket = socket;
-		this.context = context;
+		this.remoteAddress = socket.getInetAddress().getHostAddress();
+		this.listener      = listener;
+		this.socket        = socket;
 
 		this.setDaemon(true);
 
@@ -129,8 +132,8 @@ public class CloudConnection<T> extends Thread {
 				// password hash afterwards.
 				setEncryptionKey("StructrInitialEncryptionKey", 128);
 
-				sender = new Sender(this, new ObjectOutputStream(new GZIPOutputStream(new CipherOutputStream(new BufferedOutputStream(socket.getOutputStream()), encrypter), true)));
-				receiver = new Receiver(this, new ObjectInputStream(new GZIPInputStream(new CipherInputStream(new BufferedInputStream(socket.getInputStream()), decrypter))));
+				sender = new Sender(this, new DataOutputStream(new BufferedOutputStream(new GZIPOutputStream(new CipherOutputStream(socket.getOutputStream(), encrypter), 32768, true))));
+				receiver = new Receiver(this, new DataInputStream(new BufferedInputStream(new GZIPInputStream(new CipherInputStream(socket.getInputStream(), decrypter), 32768))));
 
 				receiver.start();
 				sender.start();
@@ -154,27 +157,39 @@ public class CloudConnection<T> extends Thread {
 				final Message request = receiver.receive();
 				if (request != null) {
 
-					// inform sender that a message has arrived
-					sender.messageReceived();
+					logDebug("RECEIVED ", request);
 
 					// refresh transmission timeout
 					refreshTransmissionTimeout();
 
-					if (wasSentFromHere(request)) {
+					if (request.wasSentFromHere()) {
 
-						request.onResponse(this, context);
+						request.onResponse(this);
 
 					} else {
 
-						request.onRequest(this, context);
-					}
-
-					if (CloudService.DEBUG) {
-						System.out.println("        => " + request);
+						request.onRequest(this);
 					}
 				}
 
-				Thread.yield();
+				if (count >= 100) {
+
+					final String message = "Committing batch..";
+
+					sender.send(new Ping(message));
+
+					if (listener != null) {
+						listener.transmissionProgress(message);
+					}
+
+					// intermediate commit
+					this.commitTransaction();
+					this.endTransaction();
+					this.beginTransaction();
+
+					count = 0;
+
+				}
 
 			} catch (Throwable t) {
 				t.printStackTrace();
@@ -187,19 +202,10 @@ public class CloudConnection<T> extends Thread {
 
 	}
 
-	private boolean wasSentFromHere(final Message message) {
-		return localMessageIds.contains(message.getId());
-	}
-
 	public void send(final Message message) throws IOException, FrameworkException {
 
+		logDebug("SEND", message);
 		sender.send(message);
-
-		if (CloudService.DEBUG) {
-			System.out.println(message);
-		}
-
-		localMessageIds.add(message.getId());
 	}
 
 	/**
@@ -224,7 +230,7 @@ public class CloudConnection<T> extends Thread {
 
 	public void waitForAuthentication() throws FrameworkException {
 
-		final long abortTime = System.currentTimeMillis() + CloudService.DEFAULT_TIMEOUT;
+		final long abortTime = System.currentTimeMillis() + CloudService.AUTH_TIMEOUT;
 
 		while (!authenticated) {
 
@@ -234,11 +240,13 @@ public class CloudConnection<T> extends Thread {
 
 			if (System.currentTimeMillis() > abortTime) {
 
-				throw new FrameworkException(504, "Authentication failed.");
+				throw new FrameworkException(401, "Authentication failed.");
 			}
 
 			try {
+
 				Thread.sleep(10);
+
 			} catch (Throwable t) {
 				t.printStackTrace();
 			}
@@ -253,7 +261,7 @@ public class CloudConnection<T> extends Thread {
 
 		transmissionAbortTime = System.currentTimeMillis() + CloudService.DEFAULT_TIMEOUT;
 
-		while (context.getCurrentProgress() < context.getTotalSize()) {
+		while (isConnected()) {
 
 			if (errorMessage != null) {
 				throw new FrameworkException(errorCode, errorMessage);
@@ -265,7 +273,9 @@ public class CloudConnection<T> extends Thread {
 			}
 
 			try {
+
 				Thread.sleep(10);
+
 			} catch (Throwable t) {
 				t.printStackTrace();
 			}
@@ -336,27 +346,27 @@ public class CloudConnection<T> extends Thread {
 			return null;
 		}
 
-		final PropertyMap properties             = PropertyMap.databaseTypeToJavaType(securityContext, nodeType, receivedNodeData.getProperties());
-		final String uuid                        = receivedNodeData.getSourceNodeId();
-		NodeInterface newOrExistingNode          = null;
+		final String uuid              = receivedNodeData.getSourceNodeId();
+		GraphObject newOrExistingNode  = app.get(nodeType, uuid);
 
-		final NodeInterface existingCandidate = app.nodeQuery().and(GraphObject.id, uuid).includeDeletedAndHidden().getFirst();
-		if (existingCandidate != null && existingCandidate instanceof NodeInterface) {
-
-			newOrExistingNode = (NodeInterface) existingCandidate;
+		if (newOrExistingNode != null) {
 
 			// merge properties
-			((Syncable) newOrExistingNode).updateFromPropertyMap(properties);
+			newOrExistingNode.updateFromPropertyMap(receivedNodeData.getProperties());
 
 		} else {
 
 			// create
+			final PropertyMap properties = PropertyMap.databaseTypeToJavaType(securityContext, nodeType, receivedNodeData.getProperties());
 			newOrExistingNode = app.create(nodeType, properties);
 		}
 
 		idMap.put(receivedNodeData.getSourceNodeId(), newOrExistingNode.getUuid());
 
-		return newOrExistingNode;
+		count++;
+		total++;
+
+		return (NodeInterface)newOrExistingNode;
 	}
 
 	public RelationshipInterface storeRelationship(final DataContainer receivedData) throws FrameworkException {
@@ -394,19 +404,27 @@ public class CloudConnection<T> extends Thread {
 			if (targetStartNode != null && targetEndNode != null) {
 
 				final RelationshipInterface existingCandidate = app.relationshipQuery().and(GraphObject.id, uuid).includeDeletedAndHidden().getFirst();
-				final PropertyMap properties = PropertyMap.databaseTypeToJavaType(securityContext, relType, receivedRelationshipData.getProperties());
+
+				count++;
+				total++;
 
 				if (existingCandidate != null) {
 
 					// merge properties?
-					((Syncable) existingCandidate).updateFromPropertyMap(properties);
+					existingCandidate.updateFromPropertyMap(receivedRelationshipData.getProperties());
 
 					return existingCandidate;
 
 				} else {
 
+					final PropertyMap properties = PropertyMap.databaseTypeToJavaType(securityContext, relType, receivedRelationshipData.getProperties());
 					return app.create(targetStartNode, targetEndNode, relType, properties);
 				}
+
+			} else {
+
+				logger.log(Level.WARNING, "Could not store relationship {0} -> {1}", new Object[]{ targetStartNode, targetEndNode });
+
 			}
 
 		}
@@ -416,12 +434,35 @@ public class CloudConnection<T> extends Thread {
 		return null;
 	}
 
-	public void beginTransaction() {
-		tx = app.tx();
+	public void delete(final String uuid) throws FrameworkException {
 
-		if (CloudService.DEBUG) {
-			System.out.println("############################### OPENING TRANSACTION " + tx + " in Thread" + Thread.currentThread());
+		final GraphObject obj = app.get(uuid);
+		if (obj != null) {
+
+			if (obj instanceof NodeInterface) {
+
+				app.delete((NodeInterface)obj);
+
+			} else {
+
+				app.delete((RelationshipInterface)obj);
+			}
+
+			count++;
+			total++;
 		}
+	}
+
+	public void deleteRelationship(final String uuid) throws FrameworkException {
+		app.delete((RelationshipInterface)app.get(uuid));
+	}
+
+	public void beginTransaction() {
+
+		tx = app.tx();
+		tx.setSource(this);
+
+		logDebug("######################## OPENING TRANSACTION " + tx + " in thread " + Thread.currentThread(), null);
 	}
 
 	public void commitTransaction() {
@@ -429,6 +470,8 @@ public class CloudConnection<T> extends Thread {
 		if (tx != null) {
 
 			try {
+
+				logDebug("######################## COMMITING TRANSACTION " + tx + " in thread " + Thread.currentThread(), null);
 
 				tx.success();
 
@@ -449,9 +492,7 @@ public class CloudConnection<T> extends Thread {
 
 		if (tx != null) {
 
-			if (CloudService.DEBUG) {
-				System.out.println("############################### CLOSING TRANSACTION " + tx + " in Thread" + Thread.currentThread());
-			}
+			logDebug("######################## CLOSING TRANSACTION " + tx + " in thread " + Thread.currentThread(), null);
 
 			try {
 
@@ -489,7 +530,11 @@ public class CloudConnection<T> extends Thread {
 	}
 
 	public void beginFile(final FileNodeDataContainer container) {
+
 		fileMap.put(container.getSourceNodeId(), container);
+
+		count++;
+		total++;
 	}
 
 	public void finishFile(final FileNodeEndChunk endChunk) throws FrameworkException {
@@ -527,6 +572,9 @@ public class CloudConnection<T> extends Thread {
 				// interrupted here
 				t.printStackTrace();
 			}
+
+			count++;
+			total++;
 		}
 	}
 
@@ -541,10 +589,13 @@ public class CloudConnection<T> extends Thread {
 		} else {
 
 			container.addChunk(chunk);
+
+			count++;
+			total++;
 		}
 	}
 
-	public List<SyncableInfo> listSyncables(final Set<Class<Syncable>> types) throws FrameworkException {
+	public List<SyncableInfo> listSyncables(final Set<Class<? extends GraphObject>> types) throws FrameworkException {
 
 		final List<SyncableInfo> syncables = new LinkedList<>();
 
@@ -569,35 +620,24 @@ public class CloudConnection<T> extends Thread {
 			for (final SchemaRelationship schemaRelationship : app.relationshipQuery(SchemaRelationship.class).getAsList()) {
 				syncables.add(new SyncableInfo(schemaRelationship));
 			}
-
 		}
 
-		for (final Class<Syncable> type : types) {
-
-			Class cls;
-			try {
-				cls = Class.forName(type.getName());
-			} catch (ClassNotFoundException ex) {
-				continue;
-			}
+		for (final Class type : types) {
 
 			if (NodeInterface.class.isAssignableFrom(type)) {
 
-				for (final NodeInterface syncable : (Iterable<NodeInterface>) app.nodeQuery(cls).getAsList()) {
-					syncables.add(new SyncableInfo((Syncable) syncable));
+				for (final NodeInterface syncable : (Iterable<NodeInterface>) app.nodeQuery(type).getAsList()) {
+					syncables.add(new SyncableInfo(syncable));
 				}
 
 			} else if (RelationshipInterface.class.isAssignableFrom(type)) {
 
-				for (final RelationshipInterface syncable : (Iterable<RelationshipInterface>) app.relationshipQuery(cls).getAsList()) {
-					syncables.add(new SyncableInfo((Syncable) syncable));
+				for (final RelationshipInterface syncable : (Iterable<RelationshipInterface>) app.relationshipQuery(type).getAsList()) {
+					syncables.add(new SyncableInfo(syncable));
 				}
-
 			}
-
 		}
 
-//
 		return syncables;
 	}
 
@@ -621,15 +661,45 @@ public class CloudConnection<T> extends Thread {
 		return payload;
 	}
 
-	public void increaseTotal(final int total) {
-		context.increaseTotal(total);
-	}
-
 	public void setError(final int errorCode, final String errorMessage) {
 
 		this.errorMessage = errorMessage;
 		this.errorCode = errorCode;
 
 		close();
+	}
+
+	public void logDebug(final String prefix, final Message request) {
+
+		if (CloudService.DEBUG) {
+			System.out.println(Thread.currentThread().getId() + ": " + System.currentTimeMillis() + "        " + prefix + " " + (request != null ? request : "") + ", count: " + count);
+		}
+	}
+
+	@Override
+	public boolean isLocal() {
+		return false;
+	}
+
+	@Override
+	public boolean isRemote() {
+		return true;
+	}
+
+	@Override
+	public String getOriginAddress() {
+		return remoteAddress;
+	}
+
+	public CloudListener getListener() {
+		return listener;
+	}
+
+	public int getCount() {
+		return count;
+	}
+
+	public int getTotal() {
+		return total;
 	}
 }

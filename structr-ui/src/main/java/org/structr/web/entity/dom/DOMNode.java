@@ -45,7 +45,6 @@ import org.neo4j.graphdb.DynamicRelationshipType;
 import org.neo4j.graphdb.Relationship;
 import org.structr.common.Permission;
 import org.structr.common.SecurityContext;
-import org.structr.common.Syncable;
 import org.structr.common.error.ErrorBuffer;
 import org.structr.common.error.FrameworkException;
 import org.structr.core.GraphObject;
@@ -59,7 +58,6 @@ import org.structr.core.app.StructrApp;
 import org.structr.core.entity.AbstractNode;
 import org.structr.core.entity.LinkedTreeNode;
 import org.structr.core.graph.NodeInterface;
-import org.structr.core.graph.RelationshipInterface;
 import org.structr.core.notion.PropertyNotion;
 import org.structr.core.parser.Functions;
 import org.structr.core.property.BooleanProperty;
@@ -106,7 +104,7 @@ import org.w3c.dom.UserDataHandler;
  *
  * @author Christian Morgner
  */
-public abstract class DOMNode extends LinkedTreeNode<DOMChildren, DOMSiblings, DOMNode> implements Node, Renderable, DOMAdoptable, DOMImportable, Syncable {
+public abstract class DOMNode extends LinkedTreeNode<DOMChildren, DOMSiblings, DOMNode> implements Node, Renderable, DOMAdoptable, DOMImportable {
 
 	private static final Logger logger = Logger.getLogger(DOMNode.class.getName());
 
@@ -171,7 +169,7 @@ public abstract class DOMNode extends LinkedTreeNode<DOMChildren, DOMSiblings, D
 	public static final Property<String> pageId = new EntityIdProperty("pageId", ownerDocument);
 
 	public static final Property<String> dataStructrIdProperty = new StringProperty("data-structr-id");
-	public static final Property<String> dataHashProperty = new StringProperty("data-hash");
+	public static final Property<String> dataHashProperty = new StringProperty("data-structr-hash");
 
 	static {
 
@@ -526,9 +524,8 @@ public abstract class DOMNode extends LinkedTreeNode<DOMChildren, DOMSiblings, D
 
 	public String getIdHash() {
 
-		final String uuid = getUuid();
+		return getUuid();
 
-		return Integer.toHexString(uuid.hashCode());
 	}
 
 	public String getIdHashOrProperty() {
@@ -1759,9 +1756,9 @@ public abstract class DOMNode extends LinkedTreeNode<DOMChildren, DOMSiblings, D
 
 	// ----- interface Syncable -----
 	@Override
-	public List<Syncable> getSyncData() {
+	public List<GraphObject> getSyncData() {
 
-		final List<Syncable> data = new LinkedList<>();
+		final List<GraphObject> data = super.getSyncData();
 
 		// nodes
 		data.addAll(getProperty(DOMNode.children));
@@ -1783,27 +1780,19 @@ public abstract class DOMNode extends LinkedTreeNode<DOMChildren, DOMSiblings, D
 			data.add(siblingRel);
 		}
 
+		// for template nodes
+		data.add(getProperty(DOMNode.sharedComponent));
+		data.add(getIncomingRelationship(Sync.class));
+
+		if (isSynced()) {
+
+			// add parent
+			data.add(getProperty(ownerDocument));
+			data.add(getOutgoingRelationship(PageLink.class));
+		}
+
+
 		return data;
-	}
-
-	@Override
-	public boolean isNode() {
-		return true;
-	}
-
-	@Override
-	public boolean isRelationship() {
-		return false;
-	}
-
-	@Override
-	public NodeInterface getSyncNode() {
-		return this;
-	}
-
-	@Override
-	public RelationshipInterface getSyncRelationship() {
-		return null;
 	}
 
 	// ----- nested classes -----

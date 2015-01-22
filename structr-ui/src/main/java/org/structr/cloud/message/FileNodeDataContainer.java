@@ -18,6 +18,8 @@
  */
 package org.structr.cloud.message;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,9 +31,8 @@ import java.util.Iterator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.structr.cloud.CloudConnection;
-import org.structr.cloud.CloudService;
-import org.structr.cloud.ExportContext;
 import org.structr.common.error.FrameworkException;
+import org.structr.core.graph.SyncCommand;
 import org.structr.dynamic.File;
 
 /**
@@ -59,20 +60,13 @@ public class FileNodeDataContainer extends NodeDataContainer {
 	}
 
 	@Override
-	public void onRequest(CloudConnection serverConnection, ExportContext context) throws IOException, FrameworkException {
-
-		context.increaseTotal(Long.valueOf(fileSize / CloudService.CHUNK_SIZE).intValue() + 2);
-
+	public void onRequest(CloudConnection serverConnection) throws IOException, FrameworkException {
 		serverConnection.beginFile(this);
-		serverConnection.send(ack());
-
-		context.progress();
+		sendKeepalive(serverConnection);
 	}
 
 	@Override
-	public void onResponse(CloudConnection clientConnection, ExportContext context) throws IOException, FrameworkException {
-
-		context.progress();
+	public void onResponse(CloudConnection clientConnection) throws IOException, FrameworkException {
 	}
 
 	/**
@@ -140,7 +134,7 @@ public class FileNodeDataContainer extends NodeDataContainer {
 
 		} else {
 
-			logger.log(Level.WARNING, "outputStream was null!");
+			logger.log(Level.WARNING, "outputStream was null, fileSize: " + fileSize + "..");
 		}
 	}
 
@@ -176,6 +170,22 @@ public class FileNodeDataContainer extends NodeDataContainer {
 
 	public void setFileSize(long fileSize) {
 		this.fileSize = fileSize;
+	}
+
+	@Override
+	protected void deserializeFrom(DataInputStream inputStream) throws IOException {
+
+		this.fileSize = (Long)SyncCommand.deserialize(inputStream);
+
+		super.deserializeFrom(inputStream);
+	}
+
+	@Override
+	protected void serializeTo(DataOutputStream outputStream) throws IOException {
+
+		SyncCommand.serialize(outputStream, fileSize);
+
+		super.serializeTo(outputStream);
 	}
 
 	// ----- public static methods -----

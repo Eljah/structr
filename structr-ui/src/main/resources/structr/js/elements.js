@@ -318,9 +318,12 @@ var _Elements = {
     appendElementElement: function(entity, refNode, refNodeIsParent) {
         log('_Elements.appendElementElement', entity);
 
-        if (!entity)
+        if (!entity) {
             return false;
-
+        }
+        
+        entity = StructrModel.ensureObject(entity);
+        
         var hasChildren = entity.childrenIds && entity.childrenIds.length;
         var isComponent = entity.sharedComponent || (entity.syncedNodes && entity.syncedNodes.length);
 
@@ -413,7 +416,7 @@ var _Elements = {
         });
 
         _Entities.setMouseOver(div, undefined, ((entity.syncedNodes&&entity.syncedNodes.length)?entity.syncedNodes:[entity.sharedComponent]));
-        //_Entities.appendEditSourceIcon(div, entity);
+        _Entities.appendEditSourceIcon(div, entity);
         _Entities.appendEditPropertiesIcon(div, entity);
         //_Entities.appendDataIcon(div, entity);
 

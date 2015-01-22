@@ -18,13 +18,15 @@
  */
 package org.structr.cloud.message;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import javax.crypto.Cipher;
 import org.structr.cloud.CloudConnection;
 import org.structr.cloud.CloudService;
-import org.structr.cloud.ExportContext;
 import org.structr.common.error.FrameworkException;
 import org.structr.core.entity.Principal;
+import org.structr.core.graph.SyncCommand;
 
 /**
  *
@@ -34,9 +36,10 @@ import org.structr.core.entity.Principal;
 
 public class AuthenticationRequest extends Message {
 
-	private String userName = null;
-	private String salt     = null;
-	private int keyLength   = 128;
+	private String userName     = null;
+	private String salt         = null;
+	private int keyLength       = 128;
+	private int protocolVersion = 0;
 
 	public AuthenticationRequest() {}
 
@@ -69,7 +72,13 @@ public class AuthenticationRequest extends Message {
 	}
 
 	@Override
-	public void onRequest(CloudConnection serverConnection, ExportContext context) throws IOException, FrameworkException {
+	public void onRequest(CloudConnection serverConnection) throws IOException, FrameworkException {
+
+		if (protocolVersion != CloudService.PROTOCOL_VERSION) {
+
+			serverConnection.send(new Error(400, "Unsupported protocol version " + protocolVersion + ", server needs " + CloudService.PROTOCOL_VERSION));
+			return;
+		}
 
 		final Principal user = serverConnection.getUser(userName);
 		if (user != null) {
@@ -87,12 +96,12 @@ public class AuthenticationRequest extends Message {
 
 		} else {
 
-			serverConnection.send(new Error(401, "Wrong username or password."));
+			serverConnection.send(new Error(401, "Authentication failed."));
 		}
 	}
 
 	@Override
-	public void onResponse(CloudConnection clientConnection, ExportContext context) throws IOException, FrameworkException {
+	public void onResponse(CloudConnection clientConnection) throws IOException, FrameworkException {
 	}
 
 	@Override
@@ -100,7 +109,20 @@ public class AuthenticationRequest extends Message {
 	}
 
 	@Override
-	public Object getPayload() {
-		return null;
+	protected void deserializeFrom(DataInputStream inputStream) throws IOException {
+
+		this.userName        = (String)SyncCommand.deserialize(inputStream);
+		this.salt            = (String)SyncCommand.deserialize(inputStream);
+		this.keyLength       = (Integer)SyncCommand.deserialize(inputStream);
+		this.protocolVersion = (Integer)SyncCommand.deserialize(inputStream);
+	}
+
+	@Override
+	protected void serializeTo(DataOutputStream outputStream) throws IOException {
+
+		SyncCommand.serialize(outputStream, userName);
+		SyncCommand.serialize(outputStream, salt);
+		SyncCommand.serialize(outputStream, keyLength);
+		SyncCommand.serialize(outputStream, CloudService.PROTOCOL_VERSION);
 	}
 }

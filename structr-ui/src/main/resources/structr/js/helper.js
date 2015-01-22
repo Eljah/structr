@@ -108,6 +108,7 @@ if (typeof String.prototype.capitalize !== 'function') {
 if (typeof String.prototype.escapeForJSON !== 'function') {
     String.prototype.escapeForJSON = function() {
         return this
+                .replace(/\\/g, '\\\\')
                 .replace(/"/g, '\\"');
     };
 }
@@ -154,6 +155,9 @@ if (typeof String.prototype.extractVal !== 'function') {
  * any <br> tag into a line feed ('\n').
  */
 function cleanText(input) {
+    if (typeof input !== 'string') {
+        return input;
+    }
     //console.log(input);
     var output = input
             .replace(/<br><\/div>/ig, '\n')

@@ -18,12 +18,14 @@
  */
 package org.structr.cloud.message;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import org.structr.cloud.CloudConnection;
-import org.structr.cloud.ExportContext;
 import org.structr.common.error.FrameworkException;
 import org.structr.core.entity.AbstractRelationship;
 import org.structr.core.graph.RelationshipInterface;
+import org.structr.core.graph.SyncCommand;
 
 /**
  * Serializable data container for a relationship to be transported over network.
@@ -42,6 +44,10 @@ public class RelationshipDataContainer extends DataContainer implements Comparab
 	public RelationshipDataContainer() {}
 
 	public RelationshipDataContainer(final RelationshipInterface relationship, final int sequenceNumber) throws FrameworkException {
+		this(relationship, sequenceNumber, relationship.getRelationship().getPropertyKeys());
+	}
+
+	public RelationshipDataContainer(final RelationshipInterface relationship, final int sequenceNumber, final Iterable<String> propertyKeys) throws FrameworkException {
 
 		super(sequenceNumber);
 
@@ -51,7 +57,7 @@ public class RelationshipDataContainer extends DataContainer implements Comparab
 		sourceEndNodeId   = relationship.getTargetNode().getUuid();
 		relationshipId    = relationship.getUuid();
 
-		collectProperties(relationship.getRelationship());
+		collectProperties(relationship.getRelationship(), propertyKeys);
 	}
 
 	/**
@@ -126,17 +132,13 @@ public class RelationshipDataContainer extends DataContainer implements Comparab
 	}
 
 	@Override
-	public void onRequest(CloudConnection serverConnection, ExportContext context) throws IOException, FrameworkException {
-
+	public void onRequest(CloudConnection serverConnection) throws IOException, FrameworkException {
 		serverConnection.storeRelationship(this);
-		serverConnection.send(ack());
-
-		context.progress();
+		sendKeepalive(serverConnection);
 	}
 
 	@Override
-	public void onResponse(CloudConnection clientConnection, ExportContext context) throws IOException, FrameworkException {
-		context.progress();
+	public void onResponse(CloudConnection clientConnection) throws IOException, FrameworkException {
 	}
 
 	@Override
@@ -144,7 +146,24 @@ public class RelationshipDataContainer extends DataContainer implements Comparab
 	}
 
 	@Override
-	public Object getPayload() {
-		return null;
+	protected void deserializeFrom(DataInputStream inputStream) throws IOException {
+
+		this.sourceStartNodeId = (String)SyncCommand.deserialize(inputStream);
+		this.sourceEndNodeId   = (String)SyncCommand.deserialize(inputStream);
+		this.relationshipId    = (String)SyncCommand.deserialize(inputStream);
+		this.relType           = (String)SyncCommand.deserialize(inputStream);
+
+		super.deserializeFrom(inputStream);
+	}
+
+	@Override
+	protected void serializeTo(DataOutputStream outputStream) throws IOException {
+
+		SyncCommand.serialize(outputStream, sourceStartNodeId);
+		SyncCommand.serialize(outputStream, sourceEndNodeId);
+		SyncCommand.serialize(outputStream, relationshipId);
+		SyncCommand.serialize(outputStream, relType);
+
+		super.serializeTo(outputStream);
 	}
 }

@@ -22,6 +22,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import org.structr.cloud.CloudService;
+import org.structr.cloud.HostInfo;
 import org.structr.cloud.WebsocketProgressListener;
 import org.structr.cloud.message.ListSyncables;
 import org.structr.cloud.message.SyncableInfo;
@@ -71,19 +72,26 @@ public class ListRemoteSyncablesCommand extends AbstractCommand {
 			final App app    = StructrApp.getInstance();
 			try (final Tx tx = app.tx()) {
 
-				final List<SyncableInfo> syncables = CloudService.doRemote(new SingleTransmission<>(new ListSyncables(type), username, password, host, port.intValue()), new WebsocketProgressListener(getWebSocket(), key));
 				final StructrWebSocket webSocket   = getWebSocket();
+				final List<SyncableInfo> syncables = CloudService.doRemote(
+					new SingleTransmission<>(new ListSyncables(type)),
+					new HostInfo(username, password, host, port.intValue()),
+					new WebsocketProgressListener(getWebSocket(), key)
+				);
+
 				if (syncables != null) {
 
 					final List<GraphObject> result = new LinkedList<>();
 					for (final SyncableInfo info : syncables) {
 
 						final GraphObjectMap map = new GraphObjectMap();
-						map.put(GraphObject.id,               info.getId());
-						map.put(NodeInterface.name,           info.getName());
-						map.put(File.size,                    info.getSize());
-						map.put(GraphObject.type,             info.getType());
-						map.put(GraphObject.lastModifiedDate, info.getLastModified());
+						map.put(GraphObject.id,                          info.getId());
+						map.put(NodeInterface.name,                      info.getName());
+						map.put(File.size,                               info.getSize());
+						map.put(GraphObject.type,                        info.getType());
+						map.put(GraphObject.visibleToPublicUsers,        info.isVisibleToPublicUsers());
+						map.put(GraphObject.visibleToAuthenticatedUsers, info.isVisibleToAuthenticatedUsers());
+						map.put(GraphObject.lastModifiedDate,            info.getLastModified());
 
 						// check for existance
 						map.put(isSynchronized, isSynchronized(info));
@@ -94,6 +102,8 @@ public class ListRemoteSyncablesCommand extends AbstractCommand {
 					webSocketData.setResult(result);
 					webSocket.send(webSocketData, true);
 				}
+
+				tx.success();
 
 			} catch (FrameworkException fex) {
 

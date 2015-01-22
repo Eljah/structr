@@ -18,11 +18,11 @@
  */
 package org.structr.cloud;
 
+import java.io.DataOutputStream;
 import org.structr.cloud.message.Message;
 import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.util.Queue;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 
 /**
  *
@@ -30,12 +30,11 @@ import java.util.concurrent.ArrayBlockingQueue;
  */
 public class Sender extends Thread {
 
-	private final Queue<Message> outputQueue = new ArrayBlockingQueue<>(10000);
-	private ObjectOutputStream outputStream  = null;
-	private CloudConnection connection       = null;
-	private int messagesInFlight             = 0;
+	private final BlockingQueue<Message> outputQueue = new ArrayBlockingQueue<>(10000);
+	private DataOutputStream outputStream            = null;
+	private CloudConnection connection               = null;
 
-	public Sender(final CloudConnection connection, final ObjectOutputStream outputStream) {
+	public Sender(final CloudConnection connection, final DataOutputStream outputStream) {
 
 		super("Sender of " + connection.getName());
 		this.setDaemon(true);
@@ -58,38 +57,36 @@ public class Sender extends Thread {
 
 		while (connection.isConnected()) {
 
-			if (messagesInFlight < CloudService.LIVE_PACKET_COUNT) {
+			try {
 
-				try {
+				while (!outputQueue.isEmpty()) {
 
 					final Message message = outputQueue.poll();
 					if (message != null) {
 
-						outputStream.writeObject(message);
-						outputStream.flush();
-
-						messagesInFlight++;
-
+						message.serialize(outputStream);
 						message.afterSend(connection);
 					}
-
-				} catch (Throwable t) {
-
-					connection.close();
 				}
 
-			} else {
+				outputStream.flush();
 
-				Thread.yield();
+			} catch (Throwable t) {
+
+				connection.close();
 			}
+
+			try { Thread.yield(); } catch (Throwable t) {}
 		}
 	}
 
 	public void send(final Message message) {
-		outputQueue.add(message);
-	}
 
-	public void messageReceived() {
-		messagesInFlight--;
+		try {
+			outputQueue.put(message);
+
+		} catch (InterruptedException iex) {
+			iex.printStackTrace();
+		}
 	}
 }

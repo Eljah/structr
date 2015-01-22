@@ -35,8 +35,13 @@ public interface RelationProperty<T> {
 	public Notion getNotion();
 
 	public Class<? extends T> getTargetType();
-	
+
 	public Relation getRelation();
-	
+
+	public boolean doAutocreate();
+	public String getAutocreateFlagName();
+
 	public void addSingleElement(final SecurityContext securityContext, final GraphObject obj, final T t) throws FrameworkException;
+
+	public String getDirectionKey();
 }

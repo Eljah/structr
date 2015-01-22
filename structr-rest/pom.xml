@@ -147,14 +147,17 @@
             <groupId>${project.groupId}</groupId>
             <artifactId>structr-core</artifactId>
             <version>${project.version}</version>
-            <type>jar</type>
-            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <version>4.11</version>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-access</artifactId>
+            <version>1.1.2</version>
         </dependency>
         <dependency>
             <groupId>com.jayway.restassured</groupId>
@@ -211,7 +214,8 @@
 
     <scm>
         <url>https://github.com/structr/structr</url>
-        <connection>scm:git:git@github.com:structr/structr.git</connection>
+        <connection>scm:git:https://github.com:structr/structr.git</connection>
+        <developerConnection>scm:git:git@github.com:structr/structr.git</developerConnection>
     </scm>
 
     <distributionManagement>

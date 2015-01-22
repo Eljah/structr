@@ -36,21 +36,21 @@ import org.structr.core.graph.NodeInterface;
 public class OneStartpoint<S extends NodeInterface> extends AbstractEndpoint implements Source<Relationship, S> {
 
 	private Relation<S, ?, OneStartpoint<S>, ?> relation = null;
-	
+
 	public OneStartpoint(final Relation<S, ?, OneStartpoint<S>, ?> relation) {
 		this.relation = relation;
 	}
-	
+
 	@Override
 	public S get(final SecurityContext securityContext, final NodeInterface node, final Predicate<GraphObject> predicate) {
-		
+
 		final NodeFactory<S> nodeFactory = new NodeFactory<>(securityContext);
 		final Relationship rel           = getRawSource(securityContext, node.getNode(), predicate);
-		
+
 		if (rel != null) {
 			return nodeFactory.adapt(rel.getStartNode());
 		}
-		
+
 		return null;
 	}
 
@@ -60,9 +60,11 @@ public class OneStartpoint<S extends NodeInterface> extends AbstractEndpoint imp
 		// let relation check multiplicity
 		relation.ensureCardinality(securityContext, sourceNode, targetNode);
 
-		if (sourceNode != null) {
+		if (sourceNode != null && targetNode != null) {
 
-			StructrApp.getInstance(securityContext).create(sourceNode, targetNode, relation.getClass(), getNotionProperties(securityContext, relation.getClass(), sourceNode.getUuid()));
+			final String storageKey = sourceNode.getName() + relation.name() + targetNode.getName();
+
+			StructrApp.getInstance(securityContext).create(sourceNode, targetNode, relation.getClass(), getNotionProperties(securityContext, relation.getClass(), storageKey));
 		}
 	}
 

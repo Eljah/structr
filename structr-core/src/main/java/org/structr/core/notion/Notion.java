@@ -18,6 +18,7 @@
  */
 package org.structr.core.notion;
 
+import java.util.Collection;
 import java.util.Collections;
 import org.structr.core.property.PropertyKey;
 import org.structr.common.SecurityContext;
@@ -32,6 +33,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.structr.core.converter.PropertyConverter;
 import org.structr.core.graph.NodeInterface;
+import org.structr.core.property.RelationProperty;
 
 //~--- classes ----------------------------------------------------------------
 
@@ -50,7 +52,7 @@ import org.structr.core.graph.NodeInterface;
 public abstract class Notion<S extends NodeInterface, T> {
 
 	private static final Logger logger = Logger.getLogger(Notion.class.getName());
-	
+
 	protected DeserializationStrategy<T, S> deserializationStrategy = null;
 	protected SerializationStrategy<S, T> serializationStrategy     = null;
 	protected SecurityContext securityContext                       = null;
@@ -60,7 +62,7 @@ public abstract class Notion<S extends NodeInterface, T> {
 	//~--- constructors ---------------------------------------------------
 
 	public Notion(SerializationStrategy serializationStrategy, DeserializationStrategy deserializationStrategy) {
-		
+
 		this.serializationStrategy   = serializationStrategy;
 		this.deserializationStrategy = deserializationStrategy;
 	}
@@ -76,11 +78,16 @@ public abstract class Notion<S extends NodeInterface, T> {
 	 */
 	public abstract PropertyKey<T> getPrimaryPropertyKey();
 
+	public void setRelationProperty(final RelationProperty<T> propertyKey) {
+		this.serializationStrategy.setRelationProperty(propertyKey);
+		this.deserializationStrategy.setRelationProperty(propertyKey);
+	}
+
 	public Adapter<S, T> getAdapterForGetter(final SecurityContext securityContext) {
 
 		this.securityContext = securityContext;
 
-		return new Adapter<S, T>() {
+		return new NotionAdapter<S, T>() {
 
 			@Override
 			public T adapt(S s) throws FrameworkException {
@@ -91,18 +98,23 @@ public abstract class Notion<S extends NodeInterface, T> {
 
 	public Adapter<T, S> getAdapterForSetter(final SecurityContext securityContext) {
 
-		return new Adapter<T, S>() {
+		return new NotionAdapter<T, S>() {
 
 			@Override
 			public S adapt(T s) throws FrameworkException {
-				return deserializationStrategy.deserialize(securityContext, type, s);
+
+				if (s instanceof Collection) {
+					throw new ClassCastException("Invalid source type.");
+				}
+
+				return deserializationStrategy.deserialize(securityContext, type, s, context);
 			}
 		};
 	}
 
 	public Adapter<List<S>, List<T>> getCollectionAdapterForGetter(final SecurityContext securityContext) {
 
-		return new Adapter<List<S>, List<T>>() {
+		return new NotionAdapter<List<S>, List<T>>() {
 
 			@Override
 			public List<T> adapt(List<S> s) throws FrameworkException {
@@ -122,11 +134,11 @@ public abstract class Notion<S extends NodeInterface, T> {
 
 	public Adapter<List<T>, List<S>> getCollectionAdapterForSetter(final SecurityContext securityContext) {
 
-		return new Adapter<List<T>, List<S>>() {
+		return new NotionAdapter<List<T>, List<S>>() {
 
 			@Override
 			public List<S> adapt(List<T> s) throws FrameworkException {
-				
+
 				if (s == null) {
 					return Collections.EMPTY_LIST;
 				}
@@ -134,7 +146,7 @@ public abstract class Notion<S extends NodeInterface, T> {
 				List<S> list = new LinkedList<>();
 				for (T t : s) {
 
-					list.add(deserializationStrategy.deserialize(securityContext, type, t));
+					list.add(deserializationStrategy.deserialize(securityContext, type, t, context));
 
 				}
 
@@ -144,40 +156,54 @@ public abstract class Notion<S extends NodeInterface, T> {
 	}
 
 	public PropertyConverter<T, S> getEntityConverter(SecurityContext securityContext) {
-		
+
 		return new PropertyConverter<T, S>(securityContext, null) {
 
 			@Override
 			public T revert(S source) throws FrameworkException {
-				return getAdapterForGetter(securityContext).adapt(source);
+
+				final NotionAdapter<S, T> adapter = (NotionAdapter)getAdapterForGetter(securityContext);
+				adapter.setContext(context);
+
+				return adapter.adapt(source);
 			}
 
 			@Override
 			public S convert(T source) throws FrameworkException {
-				return getAdapterForSetter(securityContext).adapt(source);
+
+				final NotionAdapter<T, S> adapter = (NotionAdapter)getAdapterForSetter(securityContext);
+				adapter.setContext(context);
+
+				return adapter.adapt(source);
 			}
 		};
-		
+
 	}
 
 	public PropertyConverter<List<T>, List<S>> getCollectionConverter(SecurityContext securityContext) {
-		
+
 		return new PropertyConverter<List<T>, List<S>>(securityContext, null) {
 
 			@Override
 			public List<T> revert(List<S> source) throws FrameworkException {
-				return getCollectionAdapterForGetter(securityContext).adapt(source);
+
+				final NotionAdapter<List<S>, List<T>> adapter = (NotionAdapter)getCollectionAdapterForGetter(securityContext);
+				adapter.setContext(context);
+
+				return adapter.adapt(source);
 			}
 
 			@Override
 			public List<S> convert(List<T> source) throws FrameworkException {
-				return getCollectionAdapterForSetter(securityContext).adapt(source);
+
+				final NotionAdapter<List<T>, List<S>> adapter = (NotionAdapter)getCollectionAdapterForSetter(securityContext);
+				adapter.setContext(context);
+
+				return adapter.adapt(source);
 			}
 		};
-		
+
 	}
-	
-	//~--- set methods ----------------------------------------------------
 
 	public void setType(Class<S> type) {
 		this.type = type;
@@ -186,20 +212,30 @@ public abstract class Notion<S extends NodeInterface, T> {
 	public void setIdProperty(String idProperty) {
 		this.idProperty = idProperty;
 	}
-	
+
 	public static <S, T> List<T> convertList(List<S> source, Adapter<S, T> adapter) {
-		
+
 		List<T> result = new LinkedList<>();
 		for(S s : source) {
-	
+
 			try {
 				result.add(adapter.adapt(s));
-				
+
 			} catch(FrameworkException fex) {
 				logger.log(Level.WARNING, "Error in iterable adapter", fex);
 			}
 	}
-		
+
 		return result;
+	}
+
+	// ----- nested classes -----
+	public static abstract class NotionAdapter<S, T> implements Adapter<S, T> {
+
+		protected Object context = null;
+
+		public void setContext(final Object context) {
+			this.context = context;
+		}
 	}
 }

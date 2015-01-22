@@ -20,7 +20,7 @@ package org.structr.cloud;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
-import org.structr.common.Syncable;
+import org.structr.core.GraphObject;
 import org.structr.core.graph.NodeInterface;
 import org.structr.core.graph.RelationshipInterface;
 import org.structr.dynamic.File;
@@ -37,9 +37,11 @@ public class ExportSet {
 
 	private ExportSet() {}
 
-	public boolean add(final Syncable data) {
+	public boolean add(final GraphObject data) {
 
 		if (data.isNode()) {
+
+			System.out.println("adding " + data.getSyncNode());
 
 			if (nodes.add(data.getSyncNode())) {
 
@@ -55,6 +57,8 @@ public class ExportSet {
 			}
 
 		} else {
+
+			System.out.println("adding " + data.getSyncRelationship());
 
 			if (relationships.add(data.getSyncRelationship())) {
 
@@ -86,7 +90,7 @@ public class ExportSet {
 		return new ExportSet();
 	}
 
-	public static ExportSet getInstance(final Syncable start, final boolean recursive) {
+	public static ExportSet getInstance(final GraphObject start, final boolean recursive) {
 
 		final ExportSet exportSet = new ExportSet();
 
@@ -95,14 +99,14 @@ public class ExportSet {
 		return exportSet;
 	}
 
-	private void collectSyncables(final Syncable start, boolean recursive) {
+	private void collectSyncables(final GraphObject start, boolean recursive) {
 
 		add(start);
 
 		if (recursive) {
 
 			// collect children
-			for (final Syncable child : start.getSyncData()) {
+			for (final GraphObject child : start.getSyncData()) {
 
 				if (child != null && add(child)) {
 

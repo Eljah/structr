@@ -18,10 +18,12 @@
  */
 package org.structr.cloud.message;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import org.structr.cloud.CloudConnection;
-import org.structr.cloud.ExportContext;
 import org.structr.common.error.FrameworkException;
+import org.structr.core.graph.SyncCommand;
 
 /**
  * Represents a single chunk of a <code>FileNodeDataContainer</code> that can be transmitted to a remote structr instance.
@@ -72,20 +74,42 @@ public class FileNodeChunk extends DataContainer {
 	}
 
 	@Override
-	public void onRequest(CloudConnection serverConnection, ExportContext context) throws IOException, FrameworkException {
-
+	public void onRequest(CloudConnection serverConnection) throws IOException, FrameworkException {
 		serverConnection.fileChunk(this);
-		serverConnection.send(ack());
-
-		context.progress();
+		sendKeepalive(serverConnection);
 	}
 
 	@Override
-	public void onResponse(CloudConnection clientConnection, ExportContext context) throws IOException, FrameworkException {
-		context.progress();
+	public void onResponse(CloudConnection clientConnection) throws IOException, FrameworkException {
 	}
 
 	@Override
 	public void afterSend(CloudConnection connection) {
+	}
+
+	@Override
+	protected void deserializeFrom(DataInputStream inputStream) throws IOException {
+
+		this.containerId   = (String)SyncCommand.deserialize(inputStream);
+		this.chunkSize     = (Integer)SyncCommand.deserialize(inputStream);
+		this.fileSize      = (Long)SyncCommand.deserialize(inputStream);
+
+		this.binaryContent = SyncCommand.deserializeData(inputStream);
+
+		// fixme: byte array is not handled correctly
+
+		super.deserializeFrom(inputStream);
+	}
+
+	@Override
+	protected void serializeTo(DataOutputStream outputStream) throws IOException {
+
+		SyncCommand.serialize(outputStream, containerId);
+		SyncCommand.serialize(outputStream, chunkSize);
+		SyncCommand.serialize(outputStream, fileSize);
+
+		SyncCommand.serializeData(outputStream, binaryContent);
+
+		super.serializeTo(outputStream);
 	}
 }

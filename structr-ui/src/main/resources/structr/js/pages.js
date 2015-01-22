@@ -36,6 +36,7 @@ $(document).ready(function() {
     Structr.registerModule('pages', _Pages);
     Structr.classes.push('page');
 
+    win.off('resize');
     win.resize(function() {
         _Pages.resize();
     });
@@ -50,10 +51,10 @@ var _Pages = {
     autoRefresh: [],
     init: function() {
 
-        Structr.initPager('Page', 1, 25);
-        Structr.initPager('File', 1, 25);
-        Structr.initPager('Folder', 1, 25);
-        Structr.initPager('Image', 1, 25);
+        Structr.initPager('Page', 1, 25, 'name', 'asc');
+        Structr.initPager('File', 1, 25, 'name', 'asc');
+        Structr.initPager('Folder', 1, 25, 'name', 'asc');
+        Structr.initPager('Image', 1, 25, 'name', 'asc');
 
     },
     resize: function(offsetLeft, offsetRight) {
@@ -142,7 +143,7 @@ var _Pages = {
         rsw = widgetsSlideout.width() + 12;
 
         $('#pagesTab').on('click', function() {
-            if (pagesSlideout.position().left === -lsw) {
+            if (Math.abs(pagesSlideout.position().left + lsw) <= 3) {
                 Structr.closeLeftSlideOuts([activeElementsSlideout, dataBindingSlideout], activeTabLeftKey);
                 Structr.openLeftSlideOut(pagesSlideout, this, activeTabLeftKey);
             } else {
@@ -151,7 +152,7 @@ var _Pages = {
         }).droppable({
             tolerance: 'touch',
             over: function(e, ui) {
-                if (pagesSlideout.position().left === -lsw) {
+                if (Math.abs(pagesSlideout.position().left + lsw) <= 3) {
                     Structr.closeLeftSlideOuts([activeElementsSlideout, dataBindingSlideout], activeTabLeftKey);
                     Structr.openLeftSlideOut(pagesSlideout, this, activeTabLeftKey);
                 } else {
@@ -161,7 +162,7 @@ var _Pages = {
         });
 
         $('#activeElementsTab').on('click', function() {
-            if (activeElementsSlideout.position().left === -lsw) {
+            if (Math.abs(activeElementsSlideout.position().left + lsw) <= 3) {
                 Structr.closeLeftSlideOuts([pagesSlideout, dataBindingSlideout], activeTabLeftKey);
                 Structr.openLeftSlideOut(activeElementsSlideout, this, activeTabLeftKey, function() {
                 });
@@ -171,7 +172,7 @@ var _Pages = {
         });
 
         $('#dataBindingTab').on('click', function() {
-            if (dataBindingSlideout.position().left === -lsw) {
+            if (Math.abs(dataBindingSlideout.position().left + lsw) <= 3) {
                 Structr.closeLeftSlideOuts([pagesSlideout, activeElementsSlideout], activeTabLeftKey);
                 Structr.openLeftSlideOut(dataBindingSlideout, this, activeTabLeftKey, function() {
                     _Pages.reloadDataBindingWizard();
@@ -182,7 +183,7 @@ var _Pages = {
         });
 
         $('#widgetsTab').on('click', function() {
-            if (widgetsSlideout.position().left === $(window).width()) {
+            if (Math.abs(widgetsSlideout.position().left - $(window).width()) <= 3) {
                 Structr.closeSlideOuts([paletteSlideout, componentsSlideout, elementsSlideout], activeTabRightKey);
                 Structr.openSlideOut(widgetsSlideout, this, activeTabRightKey, function() {
                     _Elements.reloadWidgets();
@@ -193,7 +194,7 @@ var _Pages = {
         });
 
         $('#paletteTab').on('click', function() {
-            if (paletteSlideout.position().left === $(window).width()) {
+            if (Math.abs(paletteSlideout.position().left - $(window).width()) <= 3) {
                 Structr.closeSlideOuts([widgetsSlideout, componentsSlideout, elementsSlideout], activeTabRightKey);
                 Structr.openSlideOut(paletteSlideout, this, activeTabRightKey, function() {
                     _Elements.reloadPalette();
@@ -204,7 +205,7 @@ var _Pages = {
         });
 
         $('#componentsTab').on('click', function() {
-            if (componentsSlideout.position().left === $(window).width()) {
+            if (Math.abs(componentsSlideout.position().left - $(window).width()) <= 3) {
                 Structr.closeSlideOuts([widgetsSlideout, paletteSlideout, elementsSlideout], activeTabRightKey);
                 Structr.openSlideOut(componentsSlideout, this, activeTabRightKey, function() {
                     _Elements.reloadComponents();
@@ -215,7 +216,7 @@ var _Pages = {
         }).droppable({
             tolerance: 'touch',
             over: function(e, ui) {
-                if (componentsSlideout.position().left === $(window).width()) {
+                if (Math.abs(componentsSlideout.position().left - $(window).width()) <= 3) {
                     Structr.closeSlideOuts([widgetsSlideout, paletteSlideout, elementsSlideout], activeTabRightKey);
                     Structr.openSlideOut(componentsSlideout, this, activeTabRightKey, function() {
                         _Elements.reloadComponents();
@@ -225,7 +226,7 @@ var _Pages = {
         });
 
         $('#elementsTab').on('click', function() {
-            if (elementsSlideout.position().left === $(window).width()) {
+            if (Math.abs(elementsSlideout.position().left - $(window).width()) <= 3) {
                 $(this).addClass('active');
                 Structr.closeSlideOuts([widgetsSlideout, paletteSlideout, componentsSlideout], activeTabRightKey);
                 Structr.openSlideOut(elementsSlideout, this, activeTabRightKey, function() {
@@ -511,7 +512,7 @@ var _Pages = {
             var self = $(this);
             var pageId = self.prop('id').substring('preview_'.length);
             var iframe = $('#preview_' + pageId);
-            iframe.prop('src', '');
+            iframe.contents().empty();
             log('iframe', pageId, 'deactivated');
         });
     },
@@ -577,6 +578,8 @@ var _Pages = {
     },
     appendPageElement: function(entity) {
 
+        entity = StructrModel.ensureObject(entity);
+
         var hasChildren = entity.children && entity.children.length;
 
         pages.append('<div id="id_' + entity.id + '" class="node page"></div>');
@@ -640,7 +643,7 @@ var _Pages = {
         $('#preview_' + entity.id).load(function() {
             var doc = $(this).contents();
             var head = $(doc).find('head');
-            if (head)
+            if (head) {
                 head.append('<style media="screen" type="text/css">'
                         + '* { z-index: 0}\n'
                         + '.nodeHover { -moz-box-shadow: 0 0 5px #888; -webkit-box-shadow: 0 0 5px #888; box-shadow: 0 0 5px #888; }\n'
@@ -663,7 +666,7 @@ var _Pages = {
                          */
                         + '.navbar-fixed-top { -webkit-transform: none ! important; }'
                         + '</style>');
-
+            }
             _Pages.findDroppablesInIframe($(this).contents(), entity.id).each(function(i, element) {
                 var el = $(element);
 
@@ -829,79 +832,6 @@ var _Pages = {
         
         _Dragndrop.makeDroppable(div);
         
-//        div.droppable({
-//            accept: '#add_html, .html_element, .template',
-//            greedy: true,
-//            hoverClass: 'nodeHover',
-//            tolerance: 'pointer',
-//            drop: function(event, ui) {
-//
-//                var self = $(this);
-//                log('dropped onto', self);
-//                // Only html elements are allowed, and only if none exists
-//
-//                if (getId(self) === getId(sortParent))
-//                    return false;
-//
-//                _Entities.ensureExpanded(self);
-//                sorting = false;
-//                sortParent = undefined;
-//
-//                var nodeData = {};
-//
-//                var page = self.closest('.page')[0];
-//
-//                var contentId = getId(ui.draggable);
-//                var elementId = getId(self);
-//                log('elementId', elementId);
-//
-//                var source = StructrModel.obj(contentId);
-//                var target = StructrModel.obj(elementId);
-//
-//                if (source && getId(page) && source.pageId && getId(page) !== source.pageId) {
-//                    event.preventDefault();
-//                    event.stopPropagation();
-//                    Command.copyDOMNode(source.id, target.id);
-//                    //_Entities.showSyncDialog(source, target);
-//                    _Elements.reloadComponents();
-//                    return;
-//                } else {
-//                    log('not copying node');
-//                }
-//
-//                if (contentId === elementId) {
-//                    log('drop on self not allowed');
-//                    return;
-//                }
-//
-//                var tag;
-//                var cls = Structr.getClass($(ui.draggable));
-//
-//                if (!contentId) {
-//                    tag = $(ui.draggable).text();
-//
-//                    if (tag !== 'html') {
-//                        return false;
-//                    }
-//
-//                    var pageId = (page ? getId(page) : target.pageId);
-//
-//                    Command.createAndAppendDOMNode(pageId, elementId, (tag !== 'content' ? tag : ''), nodeData);
-//                    return;
-//
-//                } else {
-//                    tag = cls;
-//                    log('appendChild', contentId, elementId);
-//                    sorting = false;
-//                    Command.appendChild(contentId, elementId);
-//                    //$(ui.draggable).remove();
-//
-//                    return;
-//                }
-//                log('drop event in appendPageElement', getId(page), getId(self), (tag !== 'content' ? tag : ''));
-//            }
-//        });
-
         return div;
 
     },
@@ -918,6 +848,7 @@ var _Pages = {
     },
     appendElementElement: function(entity, refNode, refNodeIsParent) {
         log('_Pages.appendElementElement(', entity, refNode, refNodeIsParent, ');')
+        entity = StructrModel.ensureObject(entity);
         var div = _Elements.appendElementElement(entity, refNode, refNodeIsParent);
 
         if (!div) {
