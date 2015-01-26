@@ -30,12 +30,10 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.neo4j.cypher.javacompat.ExecutionEngine;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.helpers.collection.Iterables;
-import org.neo4j.kernel.logging.BufferingLogger;
 import org.neo4j.tooling.GlobalGraphOperations;
 import org.structr.common.StructrAndSpatialPredicate;
 import org.structr.common.error.FrameworkException;
@@ -129,7 +127,6 @@ public abstract class SchemaImporter extends NodeServiceCommand {
 
 		final App app                      = StructrApp.getInstance();
 		final GraphDatabaseService graphDb = app.command(GraphDatabaseCommand.class).execute();
-		final ExecutionEngine engine       = new ExecutionEngine(graphDb, new BufferingLogger());
 
 		// nothing to do
 		if (sources.isEmpty()) {
@@ -141,7 +138,7 @@ public abstract class SchemaImporter extends NodeServiceCommand {
 
 			try {
 				// be very tolerant here, just execute everything
-				engine.execute(source);
+				graphDb.execute(source);
 
 			} catch (Throwable t) {
 				// ignore

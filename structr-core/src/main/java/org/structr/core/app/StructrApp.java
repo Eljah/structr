@@ -64,7 +64,7 @@ public class StructrApp implements App {
 
 	private static final Logger logger           = Logger.getLogger(StructrApp.class.getName());
 	private static final Object globalConfigLock = new Object();
-	private static GraphProperties config  = null;
+	private static GraphProperties config        = null;
 	private SecurityContext securityContext      = null;
 
 	private StructrApp(final SecurityContext securityContext) {
@@ -253,11 +253,11 @@ public class StructrApp implements App {
 	public <T> T getGlobalSetting(final String key, final T defaultValue) throws FrameworkException {
 
 		final NodeManager mgr        = ((GraphDatabaseAPI)getGraphDatabaseService()).getDependencyResolver().resolveDependency(NodeManager.class);
-		
+
 		if (config == null) {
 			config = mgr.newGraphProperties();
 		}
-		
+
 		T value = null;
 
 		try (final Tx tx = StructrApp.getInstance().tx()) {

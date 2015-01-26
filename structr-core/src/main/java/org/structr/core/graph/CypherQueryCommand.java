@@ -18,8 +18,6 @@
  */
 package org.structr.core.graph;
 
-import org.neo4j.cypher.javacompat.ExecutionEngine;
-import org.neo4j.cypher.javacompat.ExecutionResult;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Relationship;
 
@@ -33,6 +31,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.logging.Logger;
+import org.neo4j.graphdb.GraphDatabaseService;
+import org.neo4j.graphdb.ResourceIterator;
+import org.neo4j.graphdb.Result;
+import org.neo4j.helpers.collection.Iterables;
 import org.structr.core.GraphObjectMap;
 import org.structr.core.property.GenericProperty;
 
@@ -47,9 +49,7 @@ import org.structr.core.property.GenericProperty;
 public class CypherQueryCommand extends NodeServiceCommand {
 
 	private static final Logger logger = Logger.getLogger(CypherQueryCommand.class.getName());
-	
-	//protected static final ThreadLocalExecutionEngine engine = new ThreadLocalExecutionEngine();
-	
+
 	//~--- methods --------------------------------------------------------
 
 	public List<GraphObject> execute(String query) throws FrameworkException {
@@ -63,68 +63,69 @@ public class CypherQueryCommand extends NodeServiceCommand {
 	public List<GraphObject> execute(String query, Map<String, Object> parameters, boolean includeHiddenAndDeleted) throws FrameworkException {
 		return execute(query, parameters, includeHiddenAndDeleted, false);
 	}
-	
+
 	public List<GraphObject> execute(String query, Map<String, Object> parameters, boolean includeHiddenAndDeleted, boolean publicOnly) throws FrameworkException {
 
-		ExecutionEngine     engine      = (ExecutionEngine) arguments.get("cypherExecutionEngine");
-		RelationshipFactory relFactory  = new RelationshipFactory(securityContext);
-		NodeFactory nodeFactory         = new NodeFactory(securityContext);
-
-		List<GraphObject> resultList = new LinkedList<>();
-		ExecutionResult result       = null;
+		GraphDatabaseService graphDb   = (GraphDatabaseService)arguments.get("graphDb");
+		RelationshipFactory relFactory = new RelationshipFactory(securityContext);
+		NodeFactory nodeFactory        = new NodeFactory(securityContext);
+		List<GraphObject> resultList   = new LinkedList<>();
+		Result result                  = null;
 
 		if (parameters != null) {
 
-			result = engine.execute(query, parameters);
-			
+			result = graphDb.execute(query, parameters);
+
 		} else {
-			
-			result = engine.execute(query);
+
+			result = graphDb.execute(query);
 		}
 
-		for (Map<String, Object> row : result) {
+		try (final ResourceIterator<Map<String, Object>> iterator = result) {
 
-			GraphObjectMap dummyObject = null;
-			
-			for (Entry<String, Object> entry : row.entrySet()) {
-				
-				String key   = entry.getKey();
-				Object value = entry.getValue();
-			
-				if (value instanceof Node) {
+			for (Map<String, Object> row : Iterables.asResourceIterable(iterator)) {
 
-					NodeInterface node = nodeFactory.instantiate((Node) value, includeHiddenAndDeleted, publicOnly);
+				GraphObjectMap dummyObject = null;
 
-					if (node != null) {
+				for (Entry<String, Object> entry : row.entrySet()) {
 
-						resultList.add(node);
+					String key   = entry.getKey();
+					Object value = entry.getValue();
+
+					if (value instanceof Node) {
+
+						NodeInterface node = nodeFactory.instantiate((Node) value, includeHiddenAndDeleted, publicOnly);
+
+						if (node != null) {
+
+							resultList.add(node);
+						}
+
+					} else if (value instanceof Relationship) {
+
+						RelationshipInterface rel = relFactory.instantiate((Relationship) value);
+
+						if (rel != null) {
+
+							resultList.add(rel);
+						}
+
+					} else {
+
+						if (dummyObject == null) {
+
+							dummyObject = new GraphObjectMap();
+							resultList.add(dummyObject);
+						}
+
+						dummyObject.setProperty(new GenericProperty(key), value);
 					}
 
-				} else if (value instanceof Relationship) {
-
-					RelationshipInterface rel = relFactory.instantiate((Relationship) value);
-
-					if (rel != null) {
-
-						resultList.add(rel);
-					}
-
-				} else {
-					
-					if (dummyObject == null) {
-						
-						dummyObject = new GraphObjectMap();
-						resultList.add(dummyObject);
-					}
-						
-					dummyObject.setProperty(new GenericProperty(key), value);
 				}
-
 			}
 
 		}
 
 		return resultList;
 	}
-
 }

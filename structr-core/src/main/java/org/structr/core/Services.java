@@ -19,7 +19,6 @@
 package org.structr.core;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Arrays;
@@ -121,6 +120,7 @@ public class Services {
 	private StructrConf structrConf                    = new StructrConf();
 	private ConfigurationProvider configuration        = null;
 	private boolean initializationDone                 = false;
+	private boolean shutdownDone                       = false;
 	private String configuredServiceNames              = null;
 	private String configurationClass                  = null;
 
@@ -339,38 +339,44 @@ public class Services {
 	public void shutdown() {
 
 		initializationDone = false;
+		if (!shutdownDone) {
 
-		System.out.println("INFO: Shutting down...");
-		for (Service service : serviceCache.values()) {
+			System.out.println("INFO: Shutting down...");
 
-			try {
+			for (Service service : serviceCache.values()) {
 
-				if (service instanceof RunnableService) {
+				try {
 
-					RunnableService runnableService = (RunnableService) service;
+					if (service instanceof RunnableService) {
 
-					if (runnableService.isRunning()) {
-						runnableService.stopService();
+						RunnableService runnableService = (RunnableService) service;
+
+						if (runnableService.isRunning()) {
+							runnableService.stopService();
+						}
 					}
+
+					service.shutdown();
+
+				} catch (Throwable t) {
+
+					System.out.println("WARNING: Failed to shut down " + service.getName() + ": " + t.getMessage());
 				}
-
-				service.shutdown();
-
-			} catch (Throwable t) {
-
-				System.out.println("WARNING: Failed to shut down " + service.getName() + ": " + t.getMessage());
 			}
+
+			serviceCache.clear();
+
+			// shut down configuration provider
+			configuration.shutdown();
+
+			// clear singleton instance
+			singletonInstance = null;
+
+			System.out.println("INFO: Shutdown complete");
+
+			// signal to other shutdown hooks that the system is already shut down
+			shutdownDone = true;
 		}
-
-		serviceCache.clear();
-
-		// shut down configuration provider
-		configuration.shutdown();
-
-		// clear singleton instance
-		singletonInstance = null;
-
-		System.out.println("INFO: Shutdown complete");
 
 	}
 

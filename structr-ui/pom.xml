@@ -29,9 +29,8 @@
 
     <properties>
         <netbeans.hint.license>structr-agpl30</netbeans.hint.license>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <neo4j.version>2.2.0-M01</neo4j.version>
     </properties>
+    
     <repositories>
         <repository>
             <id>neo4j-releases</id>
@@ -202,11 +201,8 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>2.16</version>
                 <configuration>
-                    <!--                    <forkCount>1</forkCount>-->
                     <reuseForks>false</reuseForks>
                     <argLine>-Xmx1024m -XX:MaxPermSize=256m</argLine>
-                    <parallel>classes</parallel>
-                    <threadCount>8</threadCount>
                     <systemPropertyVariables>
                         <user.timezone>UTC</user.timezone>
                     </systemPropertyVariables>
@@ -289,7 +285,7 @@
                         <replacement>
                             <token>FINAL_NAME</token>
                             <value>${project.build.finalName}</value>
-                        </replacement>         
+                        </replacement>
                     </replacements>
                 </configuration>
             </plugin>
@@ -318,7 +314,7 @@
                                         <prefix>/usr/lib/${project.artifactId}/</prefix>
                                     </mapper>
                                 </data>
-                                
+
                                 <data>
                                     <src>${project.build.directory}/lib</src>
                                     <type>directory</type>
@@ -378,7 +374,7 @@
                                         <filemode>755</filemode>
                                     </mapper>
                                 </data>
-                                
+
                                 <data>
                                     <src>${basedir}/src/main/deb/init.d</src>
                                     <type>directory</type>
