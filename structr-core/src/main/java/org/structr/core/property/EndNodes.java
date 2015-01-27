@@ -136,7 +136,7 @@ public class EndNodes<S extends NodeInterface, T extends NodeInterface> extends 
 
 		if (predicate != null) {
 
-			final List<T> result = Iterables.toList(Iterables.filter(predicate, Iterables.filter(new NotNullPredicate(), endpoint.get(securityContext, (NodeInterface)obj, null))));;
+			final List<T> result = Iterables.toList(Iterables.filter(predicate, Iterables.filter(new NotNullPredicate(), endpoint.get(securityContext, (NodeInterface)obj, null))));
 
 			Collections.sort(result, new GraphObjectComparator(GraphObject.createdDate, false));
 
