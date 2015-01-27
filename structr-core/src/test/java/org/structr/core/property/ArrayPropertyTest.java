@@ -54,11 +54,19 @@ public class ArrayPropertyTest extends StructrTest {
 				String[] newArr = instance.getProperty(securityContext, testEntity, true);
 
 				assertTrue(Objects.deepEquals(arr, newArr));
+
+				tx.success();
+			}
+
+			try (final Tx tx = app.tx()) {
+
+				instance.setProperty(securityContext, testEntity, null);
+				tx.success();
 			}
 
 		} catch (FrameworkException fex) {
 
-			fail("Unable to store array");
+			fail("Unexpected exception");
 		}
 	}
 

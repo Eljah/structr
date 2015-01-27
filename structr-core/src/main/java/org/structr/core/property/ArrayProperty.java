@@ -97,6 +97,10 @@ public class ArrayProperty<T> extends AbstractPrimitiveProperty<T[]> {
 		@Override
 		public T[] convert(Object source) throws FrameworkException {
 
+			if (source == null) {
+				return null;
+			}
+
 			if (source instanceof List) {
 
 				T[] dummyValue = (T[])Array.newInstance(componentType, 0);

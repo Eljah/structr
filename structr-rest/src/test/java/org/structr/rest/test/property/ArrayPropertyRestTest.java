@@ -63,7 +63,7 @@ public class ArrayPropertyRestTest extends StructrRestTest {
 			.statusCode(200)
 		.when()
 			.put("/test_threes/" + uuid);
-		
+
 		RestAssured.given()
 			.contentType("application/json; charset=UTF-8")
 			.filter(ResponseLoggingFilter.logResponseIfStatusCodeIs(200))
@@ -75,6 +75,15 @@ public class ArrayPropertyRestTest extends StructrRestTest {
 			.body("result[0].stringArrayProperty[2]", equalTo("five"))
 		.when()
 			.get("/test_threes");
+
+		// test null
+		RestAssured.given()
+			.contentType("application/json; charset=UTF-8")
+			.body(" { 'stringArrayProperty' : null } ")
+		.expect()
+			.statusCode(200)
+		.when()
+			.put("/test_threes/" + uuid);
 	}
 
 	public void testSearch() {
