@@ -35,7 +35,7 @@ public class Tx implements AutoCloseable {
 	private AtomicBoolean guard             = new AtomicBoolean(false);
 	private SecurityContext securityContext = null;
 	private boolean success                 = false;
-	private boolean doValidation            = true;
+	private boolean doValidation            = false;//true;
 	private boolean doCallbacks             = true;
 	private boolean doNotifications         = true;
 	private TransactionCommand cmd          = null;
@@ -53,7 +53,7 @@ public class Tx implements AutoCloseable {
 
 		this.securityContext = securityContext;
 		this.doNotifications = doNotifications;
-		this.doValidation    = doValidation;
+		//this.doValidation    = doValidation;
 		this.doCallbacks     = doCallbacks;
 		this.app             = app;
 	}
